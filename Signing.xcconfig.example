@@ -1,0 +1,10 @@
+// Template for local signing config.
+//
+// Setup:
+//   1. Copy this file:  cp Signing.xcconfig.example Signing.xcconfig
+//   2. Fill in your Apple Developer team ID + Developer ID Application identity.
+//   3. Run `xcodegen generate` and build.
+//
+// Signing.xcconfig is gitignored, so your team ID / name never get committed.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_IDENTITY = Developer ID Application: YOUR NAME (YOUR_TEAM_ID)

@@ -1,0 +1,23 @@
+# Xcode / xcodegen
+*.xcodeproj
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# OMC orchestration state (not source)
+.omc/
+**/.omc/
+
+# Local signing / release secrets — personal, never commit (use the .example files)
+Signing.xcconfig
+scripts/release.local.sh
+
+# Internal planning (contains personal screenshots: bookmarks, Dock, captures)
+guide/기획/
