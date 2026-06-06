@@ -1,12 +1,13 @@
 import AppKit
 import KeyboardShortcuts
+import Sparkle
 
 /// Composition root — the single wiring hub (pizzaClip pattern). Owns the status
 /// item, the history panel, the capture shortcuts, and the loosely-coupled
 /// notification observers.
 ///
 /// 0.3.0 scope: ⇧⌥S normal capture, ⇧⌥D feature capture → editor (pen tool).
-/// Both save into the `pickle bottle` folder shown as a thumbnail grid.
+/// Both save into the `PICkle bottle` folder shown as a thumbnail grid.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var contextMenu: NSMenu!
@@ -14,9 +15,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var panelController = HistoryPanelController(viewModel: viewModel)
     private let editorController = EditorWindowController()
     private var retentionTimer: Timer?
+    // Auto-update (pizzaClip pattern). One updater instance for the app's whole
+    // lifetime — starts immediately, checks every SUScheduledCheckInterval (24h)
+    // against SUFeedURL. The context menu is rebuilt on every open, but the
+    // "Check for Updates…" item always targets this single controller.
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Create the user-facing `pickle bottle` folder on first run.
+        // Create the user-facing `PICkle bottle` folder on first run.
         _ = AppPaths.bottleDirectory
 
         setUpStatusItem()
@@ -66,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Captures interactively. The file lands in `pickle bottle` immediately
+    /// Captures interactively. The file lands in `PICkle bottle` immediately
     /// (so it's never lost even if the editor is cancelled); when `openEditor`
     /// is true we then open the editor on it.
     private func performCapture(openEditor: Bool) {
@@ -94,16 +101,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
+        buildContextMenu()
+    }
+
+    /// (Re)build the status-item context menu in the current language. Called on
+    /// launch and again each time the menu is about to open, so a language change
+    /// in Settings is reflected the next time the menu appears.
+    private func buildContextMenu() {
         contextMenu = NSMenu()
-        contextMenu.addItem(NSMenuItem(title: "Open Bottle History",
+        contextMenu.addItem(NSMenuItem(title: L("menu.openHistory"),
                                        action: #selector(openPanel), keyEquivalent: ""))
-        contextMenu.addItem(NSMenuItem(title: "Settings…",
+        contextMenu.addItem(NSMenuItem(title: L("menu.settings"),
                                        action: #selector(openSettings), keyEquivalent: ","))
+        // Target = the updater controller; it auto-enables/disables this item via
+        // canCheckForUpdates (greyed out while a check is already in flight).
+        let checkForUpdatesItem = NSMenuItem(
+            title: L("menu.checkForUpdates"),
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: "")
+        checkForUpdatesItem.target = updaterController
+        contextMenu.addItem(checkForUpdatesItem)
         contextMenu.addItem(.separator())
-        contextMenu.addItem(NSMenuItem(title: "Open pickle bottle Folder",
+        contextMenu.addItem(NSMenuItem(title: L("menu.openBottleFolder"),
                                        action: #selector(openBottleFolder), keyEquivalent: ""))
         contextMenu.addItem(.separator())
-        contextMenu.addItem(NSMenuItem(title: "Quit PIC.kle",
+        contextMenu.addItem(NSMenuItem(title: L("menu.quit"),
                                        action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
@@ -113,6 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let event = NSApp.currentEvent else { return }
         let isContextClick = event.type == .rightMouseUp || event.modifierFlags.contains(.control)
         if isContextClick {
+            // Rebuild so the menu reflects the current language each time it opens.
+            buildContextMenu()
             statusItem.menu = contextMenu
             statusItem.button?.performClick(nil)
             statusItem.menu = nil
@@ -137,10 +161,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "스크린샷 \(count)개를 모두 휴지통으로 보낼까요?"
-        alert.informativeText = "‘pickle bottle’ 폴더의 이미지가 휴지통으로 이동합니다. (휴지통에서 복구 가능)"
-        alert.addButton(withTitle: "모두 비우기")
-        alert.addButton(withTitle: "취소")
+        alert.messageText = String(format: L("alert.clearAll.message"), count)
+        alert.informativeText = L("alert.clearAll.info")
+        alert.addButton(withTitle: L("alert.clearAll.confirm"))
+        alert.addButton(withTitle: L("common.cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         ScreenshotStore.deleteAll()
         viewModel.reload()

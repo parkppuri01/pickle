@@ -8,18 +8,23 @@ import KeyboardShortcuts
 ///   - 보관:     auto-delete period + storage folder (with a Clear-all warning).
 ///   - 정보:     about.
 struct SettingsView: View {
+    @ObservedObject private var loc = LocalizationManager.shared
+
     var body: some View {
         TabView {
             ShortcutsSettingsTab()
-                .tabItem { Label("단축키", systemImage: "command") }
+                .tabItem { Label(L("settings.tab.shortcuts"), systemImage: "command") }
             WatermarkSettingsTab()
-                .tabItem { Label("워터마크", systemImage: "textformat") }
+                .tabItem { Label(L("settings.tab.watermark"), systemImage: "textformat") }
             StorageSettingsTab()
-                .tabItem { Label("보관", systemImage: "tray.full") }
+                .tabItem { Label(L("settings.tab.storage"), systemImage: "tray.full") }
             AboutTab()
-                .tabItem { Label("정보", systemImage: "info.circle") }
+                .tabItem { Label(L("settings.tab.about"), systemImage: "info.circle") }
         }
         .frame(width: 500, height: 420)
+        // Force the whole settings tree to redraw the instant the language
+        // changes, so labels everywhere swap without reopening the window.
+        .id(loc.language)
     }
 }
 
@@ -28,13 +33,13 @@ struct SettingsView: View {
 private struct ShortcutsSettingsTab: View {
     var body: some View {
         Form {
-            Section("전역 단축키") {
-                KeyboardShortcuts.Recorder("일반 캡처 (바로 저장)", name: .captureNormal)
-                KeyboardShortcuts.Recorder("기능 캡처 (편집창 열기)", name: .captureFeature)
-                KeyboardShortcuts.Recorder("클립보드 복사 (저장 안 함)", name: .captureClipboard)
+            Section(L("settings.shortcuts.section")) {
+                KeyboardShortcuts.Recorder(L("settings.shortcuts.normal"), name: .captureNormal)
+                KeyboardShortcuts.Recorder(L("settings.shortcuts.feature"), name: .captureFeature)
+                KeyboardShortcuts.Recorder(L("settings.shortcuts.clipboard"), name: .captureClipboard)
             }
             Section {
-                Text("단축키를 클릭하고 새 조합을 누르면 바뀝니다. ‘클립보드 복사’는 pickle bottle 폴더에 저장하지 않고 클립보드로만 복사합니다 (PizzaClip이 켜져 있으면 그쪽으로 들어갑니다).")
+                Text(L("settings.shortcuts.note"))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -49,21 +54,21 @@ private struct WatermarkSettingsTab: View {
     @AppStorage(EditorModel.rememberTextKey) private var rememberText = false
     // Loaded once; the user's installed font families, alphabetized.
     private let families = NSFontManager.shared.availableFontFamilies.sorted()
-    private let previewText = "PIC.kle 가나다 AaBb 123"
+    private let previewText = L("settings.watermark.previewSample")
 
     @State private var presets: [URL] = WatermarkPresets.all()
 
     var body: some View {
         Form {
-            Section("워터마크 텍스트 폰트") {
-                Picker("폰트", selection: $fontFamily) {
-                    Text("시스템 기본 (굵게)").tag("")
+            Section(L("settings.watermark.fontSection")) {
+                Picker(L("settings.watermark.font"), selection: $fontFamily) {
+                    Text(L("settings.watermark.systemFont")).tag("")
                     Divider()
                     ForEach(families, id: \.self) { family in
                         Text(family).font(.custom(family, size: 13)).tag(family)
                     }
                 }
-                LabeledContent("미리보기") {
+                LabeledContent(L("settings.watermark.preview")) {
                     Text(previewText)
                         .font(fontFamily.isEmpty
                               ? .system(size: 24, weight: .bold)
@@ -71,15 +76,15 @@ private struct WatermarkSettingsTab: View {
                         .lineLimit(1).minimumScaleFactor(0.4)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Toggle("마지막에 사용한 워터마크 텍스트 기억하기", isOn: $rememberText)
+                Toggle(L("settings.watermark.rememberText"), isOn: $rememberText)
                 if !fontFamily.isEmpty {
-                    Button("시스템 기본 폰트로 되돌리기") { fontFamily = "" }
+                    Button(L("settings.watermark.resetFont")) { fontFamily = "" }
                 }
             }
 
-            Section("저장된 로고 (반복 사용)") {
+            Section(L("settings.watermark.logoSection")) {
                 if presets.isEmpty {
-                    Text("자주 쓰는 로고 PNG를 저장해 두면 편집기 워터마크에서 바로 고를 수 있어요.")
+                    Text(L("settings.watermark.logoEmpty"))
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 10)], spacing: 10) {
@@ -92,7 +97,7 @@ private struct WatermarkSettingsTab: View {
                 Button {
                     addLogo()
                 } label: {
-                    Label("로고 PNG 추가…", systemImage: "plus")
+                    Label(L("settings.watermark.addLogo"), systemImage: "plus")
                 }
             }
         }
@@ -122,7 +127,7 @@ private struct WatermarkSettingsTab: View {
                 }
                 .buttonStyle(.plain)
                 .offset(x: 5, y: -5)
-                .help("삭제")
+                .help(L("settings.watermark.delete"))
             }
             Text(url.deletingPathExtension().lastPathComponent)
                 .font(.caption2).lineLimit(1).truncationMode(.middle)
@@ -135,7 +140,7 @@ private struct WatermarkSettingsTab: View {
         panel.allowedContentTypes = [.png, .jpeg, .tiff, .image]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.message = "워터마크로 반복 사용할 로고 이미지를 고르세요."
+        panel.message = L("settings.watermark.pickLogoMessage")
         if panel.runModal() == .OK {
             for url in panel.urls { WatermarkPresets.add(from: url) }
             presets = WatermarkPresets.all()
@@ -158,34 +163,35 @@ private struct StorageSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("자동 삭제") {
-                Picker("오래된 스크린샷 자동 삭제", selection: $autoDeleteDays) {
+            Section(L("settings.storage.autoDeleteSection")) {
+                Picker(L("settings.storage.autoDeletePicker"), selection: $autoDeleteDays) {
                     ForEach(RetentionService.options, id: \.self) { days in
-                        Text(days == 0 ? "사용 안 함 (영구 보관)" : "\(days)일 지나면 삭제").tag(days)
+                        Text(days == 0 ? L("settings.storage.autoDelete.off")
+                                       : String(format: L("settings.storage.autoDelete.days"), days)).tag(days)
                     }
                 }
                 .onChange(of: autoDeleteDays) { _ in
                     NotificationCenter.default.post(name: .pickleRetentionChanged, object: nil)
                 }
                 Text(autoDeleteDays == 0
-                     ? "스크린샷을 자동으로 지우지 않습니다. 폴더가 계속 커질 수 있어요."
-                     : "\(autoDeleteDays)일이 지난 스크린샷은 휴지통으로 보냅니다. (휴지통에서 복구 가능)")
+                     ? L("settings.storage.autoDelete.offNote")
+                     : String(format: L("settings.storage.autoDelete.onNote"), autoDeleteDays))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("저장 위치") {
-                LabeledContent("현재 폴더") {
+            Section(L("settings.storage.locationSection")) {
+                LabeledContent(L("settings.storage.currentFolder")) {
                     Text(currentPath).font(.caption).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack {
-                    Button("폴더 변경…") { changeFolder() }
+                    Button(L("settings.storage.changeFolder")) { changeFolder() }
                     if isCustomLocation {
-                        Button("기본 위치로 되돌리기") { resetFolder() }
+                        Button(L("settings.storage.resetFolder")) { resetFolder() }
                     }
                 }
                 if isCustomLocation {
-                    Label("주의: 이 폴더에는 PIC.kle가 찍지 않은 다른 이미지도 그리드에 함께 보이고, ‘모두 비우기(Clear all)’ 시 그 이미지들도 함께 휴지통으로 갑니다. 전용 폴더 사용을 권장합니다.",
+                    Label(L("settings.storage.sharedWarning"),
                           systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(.orange)
                 }
@@ -200,20 +206,20 @@ private struct StorageSettingsTab: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "이 폴더 사용"
-        panel.message = "스크린샷을 저장할 폴더를 고르세요. (전용 폴더를 권장합니다)"
+        panel.prompt = L("settings.storage.usePanelPrompt")
+        panel.message = L("settings.storage.usePanelMessage")
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         // Warn before committing to a shared folder — Clear all is folder-wide.
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "이 폴더를 보관함으로 사용할까요?"
+        alert.messageText = L("settings.storage.confirmFolder.message")
         alert.informativeText = url.path
         // The key risk sentence is colored + bold via an accessory text view,
         // since NSAlert's plain informativeText can't emphasize a substring.
         alert.accessoryView = warningAccessory()
-        alert.addButton(withTitle: "이 폴더 사용")
-        alert.addButton(withTitle: "취소")
+        alert.addButton(withTitle: L("settings.storage.confirmFolder.use"))
+        alert.addButton(withTitle: L("common.cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         customPath = url.path
@@ -237,11 +243,11 @@ private struct StorageSettingsTab: View {
             .foregroundColor: NSColor.systemRed,
         ]
         let text = NSMutableAttributedString(
-            string: "이 폴더 안의 모든 이미지가 PIC.kle 히스토리에 함께 보이고, ", attributes: normal)
+            string: L("settings.storage.warningNormal1"), attributes: normal)
         text.append(NSAttributedString(
-            string: "‘모두 비우기’를 누르면 함께 휴지통으로 이동합니다.", attributes: danger))
+            string: L("settings.storage.warningDanger"), attributes: danger))
         text.append(NSAttributedString(
-            string: " 다른 파일이 섞이지 않은 전용 폴더를 권장합니다.", attributes: normal))
+            string: L("settings.storage.warningNormal2"), attributes: normal))
 
         let label = NSTextField(wrappingLabelWithString: "")
         label.attributedStringValue = text
@@ -258,12 +264,26 @@ private struct StorageSettingsTab: View {
 // MARK: - 정보
 
 private struct AboutTab: View {
+    @ObservedObject private var loc = LocalizationManager.shared
+
     var body: some View {
         VStack(spacing: 12) {
             Image("MenuBarIcon").resizable().frame(width: 48, height: 48)
-            Text("PIC.kle").font(.system(size: 18, weight: .bold))
-            Text("스크린샷 캡처·편집·보관 🥒").font(.system(size: 12)).foregroundStyle(.secondary)
+            Text("PICkle").font(.system(size: 18, weight: .bold))
+            Text(L("settings.about.tagline")).font(.system(size: 12)).foregroundStyle(.secondary)
             Text("v0.4.0").font(.system(size: 11)).foregroundStyle(.tertiary)
+
+            Divider().padding(.horizontal, 60).padding(.top, 4)
+
+            // Runtime language switch. Changing this redraws the settings tree
+            // immediately (SettingsView observes the same manager + `.id`).
+            Picker(L("settings.language"), selection: $loc.language) {
+                ForEach(AppLanguage.allCases, id: \.self) { lang in
+                    Text(L(lang.labelKey)).tag(lang)
+                }
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

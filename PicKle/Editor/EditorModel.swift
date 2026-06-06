@@ -344,7 +344,7 @@ final class EditorModel: ObservableObject {
                 UserDefaults.standard.set(textWM.text, forKey: Self.lastTextKey)
             }
             return true
-        } catch { NSLog("PicKle editor save failed: \(error)"); return false }
+        } catch { NSLog("PICkle editor save failed: \(error)"); return false }
     }
 
     // MARK: - Helpers

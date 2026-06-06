@@ -1,0 +1,120 @@
+/* PICkle — English (en) */
+
+/* ===== Menu bar (AppDelegate) ===== */
+"menu.openHistory" = "Open Bottle History";
+"menu.settings" = "Settings…";
+"menu.openBottleFolder" = "Open PICkle bottle Folder";
+"menu.checkForUpdates" = "Check for Updates…";
+"menu.quit" = "Quit PICkle";
+
+/* ===== Clear-all alert (AppDelegate) ===== */
+"alert.clearAll.message" = "Move all %d screenshots to the Trash?";
+"alert.clearAll.info" = "Images in the ‘PICkle bottle’ folder will be moved to the Trash. (Recoverable from the Trash.)";
+"alert.clearAll.confirm" = "Clear all";
+"common.cancel" = "Cancel";
+
+/* ===== History panel ===== */
+"history.title" = "PICkle Bottle History";
+"history.lock.lockedHelp" = "Locked: stays open even if you click another window (close with ✕)";
+"history.lock.unlockedHelp" = "Unlocked: closes when you click another window";
+"history.close" = "Close";
+"history.empty.title" = "No screenshots saved yet";
+"history.empty.hint" = "Press ⇧ + ⌥ + S to take your first screenshot";
+"history.clearAll" = "Clear all";
+"history.settings" = "Settings";
+"history.thumb.help" = "Double-click: edit · 🍕: copy · drag: pull out to another app";
+"history.thumb.delete" = "Delete (to Trash)";
+"history.thumb.copy" = "Copy (to PizzaClip)";
+
+/* ===== Clipboard confirmation (ClipboardService) ===== */
+"clipboard.copied.pizzaClip" = "Copied to PizzaClip";
+"clipboard.copied.plain" = "Copied to the clipboard";
+
+/* ===== Editor window ===== */
+"editor.windowTitle" = "PICkle Editor";
+"editor.tool.pen" = "Pen";
+"editor.tool.blur" = "Blur";
+"editor.tool.watermark" = "Watermark";
+"editor.undo.help" = "Undo (⌘Z)";
+"editor.cancel" = "Cancel";
+"editor.save" = "Save";
+
+/* Watermark controls */
+"editor.text.label" = "Text";
+"editor.text.placeholder" = "Watermark text";
+"editor.text.clear.help" = "Clear text";
+"editor.text.opacity.help" = "Text opacity";
+"editor.text.size.help" = "Text size";
+"editor.logo.label" = "Logo";
+"editor.logo.clear.help" = "Remove logo";
+"editor.logo.opacity.help" = "Logo opacity";
+"editor.logo.size.help" = "Logo size";
+"editor.logo.pickFile" = "Choose from file…";
+"editor.logo.savedSection" = "Saved logos";
+"editor.logo.add" = "Add logo…";
+"editor.logo.change" = "Change logo…";
+
+/* Blur controls */
+"editor.blur.gaussian" = "Blur";
+"editor.blur.mosaic" = "Mosaic";
+"editor.blur.brush" = "Brush";
+"editor.blur.area" = "Area";
+"editor.blur.brushSize.help" = "Brush size";
+"editor.blur.intensity.help" = "Blur intensity";
+
+/* ===== Settings — tabs ===== */
+"settings.tab.shortcuts" = "Shortcuts";
+"settings.tab.watermark" = "Watermark";
+"settings.tab.storage" = "Storage";
+"settings.tab.about" = "About";
+
+/* Settings — shortcuts */
+"settings.shortcuts.section" = "Global Shortcuts";
+"settings.shortcuts.normal" = "Normal capture (save directly)";
+"settings.shortcuts.feature" = "Feature capture (open editor)";
+"settings.shortcuts.clipboard" = "Clipboard copy (don't save)";
+"settings.shortcuts.note" = "Click a shortcut and press a new combination to change it. ‘Clipboard copy’ does not save to the PICkle bottle folder — it only copies to the clipboard (and goes to PizzaClip if it's running).";
+
+/* Settings — watermark */
+"settings.watermark.previewSample" = "PICkle 가나다 AaBb 123";
+"settings.watermark.fontSection" = "Watermark Text Font";
+"settings.watermark.font" = "Font";
+"settings.watermark.systemFont" = "System default (bold)";
+"settings.watermark.preview" = "Preview";
+"settings.watermark.rememberText" = "Remember the last watermark text used";
+"settings.watermark.resetFont" = "Reset to system default font";
+"settings.watermark.logoSection" = "Saved Logos (reusable)";
+"settings.watermark.logoEmpty" = "Save logo PNGs you use often, and you can pick them right from the editor's watermark.";
+"settings.watermark.addLogo" = "Add logo PNG…";
+"settings.watermark.delete" = "Delete";
+"settings.watermark.pickLogoMessage" = "Choose a logo image to reuse as a watermark.";
+
+/* Settings — storage */
+"settings.storage.autoDeleteSection" = "Auto-delete";
+"settings.storage.autoDeletePicker" = "Auto-delete old screenshots";
+"settings.storage.autoDelete.off" = "Off (keep forever)";
+"settings.storage.autoDelete.days" = "Delete after %d days";
+"settings.storage.autoDelete.offNote" = "Screenshots are never deleted automatically. The folder may keep growing.";
+"settings.storage.autoDelete.onNote" = "Screenshots older than %d days are moved to the Trash. (Recoverable from the Trash.)";
+"settings.storage.locationSection" = "Storage Location";
+"settings.storage.currentFolder" = "Current folder";
+"settings.storage.changeFolder" = "Change folder…";
+"settings.storage.resetFolder" = "Reset to default location";
+"settings.storage.sharedWarning" = "Warning: this folder also shows other images PICkle didn't capture in the grid, and ‘Clear all’ sends those to the Trash too. A dedicated folder is recommended.";
+"settings.storage.usePanelPrompt" = "Use this folder";
+"settings.storage.usePanelMessage" = "Choose a folder to save screenshots in. (A dedicated folder is recommended.)";
+"settings.storage.confirmFolder.message" = "Use this folder as your bottle?";
+"settings.storage.confirmFolder.use" = "Use this folder";
+"settings.storage.warningNormal1" = "Every image inside this folder will appear in your PICkle history, and ";
+"settings.storage.warningDanger" = "pressing ‘Clear all’ moves them to the Trash together.";
+"settings.storage.warningNormal2" = " A dedicated folder with no other files mixed in is recommended.";
+
+/* Settings — about */
+"settings.about.tagline" = "Capture · edit · keep screenshots 🥒";
+
+/* Settings — language */
+"settings.language.section" = "Language";
+"settings.language" = "Language";
+"settings.language.system" = "System";
+"settings.language.korean" = "한국어";
+"settings.language.english" = "English";

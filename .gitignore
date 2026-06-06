@@ -14,6 +14,7 @@ DerivedData/
 # OMC orchestration state (not source)
 .omc/
 **/.omc/
+.claude/
 
 # Local signing / release secrets — personal, never commit (use the .example files)
 Signing.xcconfig

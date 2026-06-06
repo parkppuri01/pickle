@@ -30,7 +30,7 @@ enum ClipboardService {
     /// The confirmation message to show after a copy.
     static var copyConfirmation: String {
         isPizzaClipRunning
-            ? "PizzaClip으로 복사되었습니다"
-            : "클립보드(복사)에 저장되었습니다"
+            ? L("clipboard.copied.pizzaClip")
+            : L("clipboard.copied.plain")
     }
 }

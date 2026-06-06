@@ -1,6 +1,6 @@
 import Foundation
 
-/// Auto-deletes old screenshots so the `pickle bottle` folder doesn't grow
+/// Auto-deletes old screenshots so the `PICkle bottle` folder doesn't grow
 /// forever. Folder-as-truth (no DB), so we judge age by each file's
 /// modification date and move expired ones to the Trash (recoverable).
 ///
@@ -37,7 +37,7 @@ enum RetentionService {
             removed += 1
         }
         if removed > 0 {
-            NSLog("PicKle retention: trashed \(removed) screenshot(s) older than \(days) day(s).")
+            NSLog("PICkle retention: trashed \(removed) screenshot(s) older than \(days) day(s).")
         }
         return removed
     }

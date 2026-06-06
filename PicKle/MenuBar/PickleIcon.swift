@@ -1,6 +1,6 @@
 import AppKit
 
-/// Status-bar icon — the pickle jar ("bottle") that ties to the `pickle bottle`
+/// Status-bar icon — the pickle jar ("bottle") that ties to the `PICkle bottle`
 /// storage folder. Mirrors pizzaClip's `PizzaIcon` pattern.
 ///
 /// Loaded as `template-rendering-intent: original` so the painted green/yellow
@@ -25,7 +25,7 @@ enum PickleIcon {
             ?? NSImage(size: NSSize(width: size, height: size))
         image.size = NSSize(width: size, height: size)
         image.isTemplate = false
-        image.accessibilityDescription = "PIC.kle — \(count) screenshots"
+        image.accessibilityDescription = "PICkle — \(count) screenshots"
         return image
     }
 }

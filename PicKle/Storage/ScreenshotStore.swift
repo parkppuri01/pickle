@@ -1,6 +1,6 @@
 import Foundation
 
-/// A screenshot file living in the `pickle bottle` folder.
+/// A screenshot file living in the `PICkle bottle` folder.
 struct Screenshot: Identifiable, Equatable {
     let url: URL
     let date: Date
@@ -8,7 +8,7 @@ struct Screenshot: Identifiable, Equatable {
     var name: String { url.lastPathComponent }
 }
 
-/// Folder-as-truth store: the `pickle bottle` folder *is* the database. We just
+/// Folder-as-truth store: the `PICkle bottle` folder *is* the database. We just
 /// list its image files, newest first. No SQLite needed — screenshots are real
 /// user files, so drag-out and Finder integration come for free. (A metadata DB
 /// can be added later if editing/search needs it — see HANDOFF §3.)

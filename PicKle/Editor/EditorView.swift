@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// independently draggable). ⌘Z undoes pen/blur in draw order.
 struct EditorView: View {
     @ObservedObject var model: EditorModel
+    @ObservedObject private var loc = LocalizationManager.shared
     var onClose: () -> Void
 
     @State private var textDragStart: CGPoint?
@@ -212,9 +213,9 @@ struct EditorView: View {
     private var toolbarTop: some View {
         HStack(spacing: 10) {
             Picker("", selection: $model.tool) {
-                Text("펜").tag(EditorModel.Tool.pen)
-                Text("블러").tag(EditorModel.Tool.blur)
-                Text("워터마크").tag(EditorModel.Tool.watermark)
+                Text(L("editor.tool.pen")).tag(EditorModel.Tool.pen)
+                Text(L("editor.tool.blur")).tag(EditorModel.Tool.blur)
+                Text(L("editor.tool.watermark")).tag(EditorModel.Tool.watermark)
             }
             .pickerStyle(.segmented)
             .frame(width: 230, alignment: .leading)
@@ -226,11 +227,11 @@ struct EditorView: View {
             // in the order they were drawn, regardless of the current tool.
             Button { model.undoLast() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!model.canUndo)
-                .help("되돌리기 (⌘Z)")
+                .help(L("editor.undo.help"))
                 .keyboardShortcut("z", modifiers: .command)
 
-            Button("취소", role: .cancel) { onClose() }
-            Button("저장") {
+            Button(L("editor.cancel"), role: .cancel) { onClose() }
+            Button(L("editor.save")) {
                 if model.save() {
                     NotificationCenter.default.post(name: .pickleScreenshotsChanged, object: nil)
                 }
@@ -288,8 +289,8 @@ struct EditorView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Text row.
             HStack(spacing: 10) {
-                Text("글자").font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
-                TextField("워터마크 텍스트", text: $model.textWM.text)
+                Text(L("editor.text.label")).font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+                TextField(L("editor.text.placeholder"), text: $model.textWM.text)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 150)
 
@@ -298,39 +299,39 @@ struct EditorView: View {
                         Image(systemName: "xmark.circle")
                     }
                     .buttonStyle(.plain)
-                    .help("텍스트 지우기")
+                    .help(L("editor.text.clear.help"))
                 }
 
                 Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary)
-                Slider(value: $model.textWM.opacity, in: 0.2...1).frame(width: 70).help("글자 투명도")
+                Slider(value: $model.textWM.opacity, in: 0.2...1).frame(width: 70).help(L("editor.text.opacity.help"))
 
                 Image(systemName: "textformat.size").foregroundStyle(.secondary)
                 Slider(value: Binding(get: { Double(model.textWM.scale) },
                                       set: { model.textWM.scale = CGFloat($0) }),
-                       in: 0.4...3).frame(width: 70).help("글자 크기")
+                       in: 0.4...3).frame(width: 70).help(L("editor.text.size.help"))
                 Spacer()
             }
 
             // Logo row.
             HStack(spacing: 10) {
-                Text("로고").font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
+                Text(L("editor.logo.label")).font(.caption).foregroundStyle(.secondary).frame(width: 28, alignment: .leading)
                 logoMenu
 
                 if model.logoWM != nil {
                     Button(role: .destructive) { model.removeLogo() } label: {
                         Image(systemName: "xmark.circle")
                     }
-                    .help("로고 지우기")
+                    .help(L("editor.logo.clear.help"))
 
                     Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary)
                     Slider(value: Binding(get: { model.logoWM?.opacity ?? 0.85 },
                                           set: { model.logoWM?.opacity = $0 }),
-                           in: 0.2...1).frame(width: 70).help("로고 투명도")
+                           in: 0.2...1).frame(width: 70).help(L("editor.logo.opacity.help"))
 
                     Image(systemName: "textformat.size").foregroundStyle(.secondary)
                     Slider(value: Binding(get: { Double(model.logoWM?.scale ?? 1) },
                                           set: { model.logoWM?.scale = CGFloat($0) }),
-                           in: 0.4...3).frame(width: 70).help("로고 크기")
+                           in: 0.4...3).frame(width: 70).help(L("editor.logo.size.help"))
                 }
                 Spacer()
             }
@@ -340,11 +341,11 @@ struct EditorView: View {
     /// Logo picker: choose a file, or pick one of the saved presets (Settings).
     private var logoMenu: some View {
         Menu {
-            Button("파일에서 선택…") { pickLogoFromFile() }
+            Button(L("editor.logo.pickFile")) { pickLogoFromFile() }
             let presets = WatermarkPresets.all()
             if !presets.isEmpty {
                 Divider()
-                Section("저장된 로고") {
+                Section(L("editor.logo.savedSection")) {
                     ForEach(presets, id: \.self) { url in
                         Button(url.deletingPathExtension().lastPathComponent) {
                             if let img = NSImage(contentsOf: url) { model.setLogo(img) }
@@ -353,7 +354,7 @@ struct EditorView: View {
                 }
             }
         } label: {
-            Label(model.logoWM == nil ? "로고 추가…" : "로고 변경…", systemImage: "photo")
+            Label(model.logoWM == nil ? L("editor.logo.add") : L("editor.logo.change"), systemImage: "photo")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -362,27 +363,27 @@ struct EditorView: View {
     private var blurControls: some View {
         HStack(spacing: 10) {
             Picker("", selection: $model.blurStyle) {
-                Text("블러").tag(EditorModel.BlurStyle.gaussian)
-                Text("모자이크").tag(EditorModel.BlurStyle.mosaic)
+                Text(L("editor.blur.gaussian")).tag(EditorModel.BlurStyle.gaussian)
+                Text(L("editor.blur.mosaic")).tag(EditorModel.BlurStyle.mosaic)
             }
             .pickerStyle(.segmented).frame(width: 130, alignment: .leading).labelsHidden()
 
             Picker("", selection: $model.blurApply) {
-                Text("브러시").tag(EditorModel.BlurApply.brush)
-                Text("영역").tag(EditorModel.BlurApply.area)
+                Text(L("editor.blur.brush")).tag(EditorModel.BlurApply.brush)
+                Text(L("editor.blur.area")).tag(EditorModel.BlurApply.area)
             }
             .pickerStyle(.segmented).frame(width: 120, alignment: .leading).labelsHidden()
 
             if model.blurApply == .brush {
                 Image(systemName: "paintbrush").foregroundStyle(.secondary)
                 Slider(value: $model.blurBrushWidth, in: 12...90).frame(width: 80)
-                    .help("브러시 크기")
+                    .help(L("editor.blur.brushSize.help"))
             }
 
             Divider().frame(height: 18)
             Image(systemName: "drop.fill").foregroundStyle(.secondary)
             Slider(value: $model.blurIntensity, in: 0...1).frame(width: 90)
-                .help("블러 강도")
+                .help(L("editor.blur.intensity.help"))
 
             Spacer()
         }

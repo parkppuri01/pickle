@@ -17,7 +17,7 @@ final class CaptureService {
 
     private var inFlight: [Process] = []
 
-    /// Run an interactive capture, saving a PNG into the `pickle bottle` folder.
+    /// Run an interactive capture, saving a PNG into the `PICkle bottle` folder.
     /// Calls `completion` on the main queue with the saved file URL, or `nil` if
     /// the user cancelled / the capture failed.
     func captureInteractive(completion: @escaping (URL?) -> Void) {
@@ -41,7 +41,7 @@ final class CaptureService {
             inFlight.append(task)
             try task.run()
         } catch {
-            NSLog("PicKle capture failed to launch screencapture: \(error)")
+            NSLog("PICkle capture failed to launch screencapture: \(error)")
             inFlight.removeAll { $0 === task }
             DispatchQueue.main.async { completion(nil) }
         }
@@ -67,7 +67,7 @@ final class CaptureService {
             inFlight.append(task)
             try task.run()
         } catch {
-            NSLog("PicKle clipboard capture failed to launch screencapture: \(error)")
+            NSLog("PICkle clipboard capture failed to launch screencapture: \(error)")
             inFlight.removeAll { $0 === task }
             DispatchQueue.main.async { completion(false) }
         }
@@ -80,7 +80,7 @@ final class CaptureService {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let base = "PIC.kle \(df.string(from: Date()))"
+        let base = "PICkle \(df.string(from: Date()))"
 
         var url = dir.appendingPathComponent("\(base).png")
         var n = 2

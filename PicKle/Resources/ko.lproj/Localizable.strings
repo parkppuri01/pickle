@@ -1,0 +1,120 @@
+/* PICkle — Korean (ko) */
+
+/* ===== Menu bar (AppDelegate) ===== */
+"menu.openHistory" = "보관함 열기";
+"menu.settings" = "설정…";
+"menu.openBottleFolder" = "PICkle bottle 폴더 열기";
+"menu.checkForUpdates" = "업데이트 확인…";
+"menu.quit" = "PICkle 종료";
+
+/* ===== Clear-all alert (AppDelegate) ===== */
+"alert.clearAll.message" = "스크린샷 %d개를 모두 휴지통으로 보낼까요?";
+"alert.clearAll.info" = "‘PICkle bottle’ 폴더의 이미지가 휴지통으로 이동합니다. (휴지통에서 복구 가능)";
+"alert.clearAll.confirm" = "모두 비우기";
+"common.cancel" = "취소";
+
+/* ===== History panel ===== */
+"history.title" = "PICkle 보관함";
+"history.lock.lockedHelp" = "잠금: 다른 창을 눌러도 닫히지 않아요 (✕로 닫기)";
+"history.lock.unlockedHelp" = "잠금 해제: 다른 창을 누르면 닫혀요";
+"history.close" = "닫기";
+"history.empty.title" = "아직 저장된 스크린샷이 없어요";
+"history.empty.hint" = "⇧ + ⌥ + S 로 첫 스크린샷을 찍어보세요";
+"history.clearAll" = "모두 비우기";
+"history.settings" = "설정";
+"history.thumb.help" = "더블클릭: 편집 · 🍕: 복사 · 드래그: 다른 앱으로 꺼내기";
+"history.thumb.delete" = "삭제 (휴지통)";
+"history.thumb.copy" = "복사 (PizzaClip으로)";
+
+/* ===== Clipboard confirmation (ClipboardService) ===== */
+"clipboard.copied.pizzaClip" = "PizzaClip으로 복사되었습니다";
+"clipboard.copied.plain" = "클립보드(복사)에 저장되었습니다";
+
+/* ===== Editor window ===== */
+"editor.windowTitle" = "PICkle 편집기";
+"editor.tool.pen" = "펜";
+"editor.tool.blur" = "블러";
+"editor.tool.watermark" = "워터마크";
+"editor.undo.help" = "되돌리기 (⌘Z)";
+"editor.cancel" = "취소";
+"editor.save" = "저장";
+
+/* Watermark controls */
+"editor.text.label" = "글자";
+"editor.text.placeholder" = "워터마크 텍스트";
+"editor.text.clear.help" = "텍스트 지우기";
+"editor.text.opacity.help" = "글자 투명도";
+"editor.text.size.help" = "글자 크기";
+"editor.logo.label" = "로고";
+"editor.logo.clear.help" = "로고 지우기";
+"editor.logo.opacity.help" = "로고 투명도";
+"editor.logo.size.help" = "로고 크기";
+"editor.logo.pickFile" = "파일에서 선택…";
+"editor.logo.savedSection" = "저장된 로고";
+"editor.logo.add" = "로고 추가…";
+"editor.logo.change" = "로고 변경…";
+
+/* Blur controls */
+"editor.blur.gaussian" = "블러";
+"editor.blur.mosaic" = "모자이크";
+"editor.blur.brush" = "브러시";
+"editor.blur.area" = "영역";
+"editor.blur.brushSize.help" = "브러시 크기";
+"editor.blur.intensity.help" = "블러 강도";
+
+/* ===== Settings — tabs ===== */
+"settings.tab.shortcuts" = "단축키";
+"settings.tab.watermark" = "워터마크";
+"settings.tab.storage" = "보관";
+"settings.tab.about" = "정보";
+
+/* Settings — shortcuts */
+"settings.shortcuts.section" = "전역 단축키";
+"settings.shortcuts.normal" = "일반 캡처 (바로 저장)";
+"settings.shortcuts.feature" = "기능 캡처 (편집창 열기)";
+"settings.shortcuts.clipboard" = "클립보드 복사 (저장 안 함)";
+"settings.shortcuts.note" = "단축키를 클릭하고 새 조합을 누르면 바뀝니다. ‘클립보드 복사’는 PICkle bottle 폴더에 저장하지 않고 클립보드로만 복사합니다 (PizzaClip이 켜져 있으면 그쪽으로 들어갑니다).";
+
+/* Settings — watermark */
+"settings.watermark.previewSample" = "PICkle 가나다 AaBb 123";
+"settings.watermark.fontSection" = "워터마크 텍스트 폰트";
+"settings.watermark.font" = "폰트";
+"settings.watermark.systemFont" = "시스템 기본 (굵게)";
+"settings.watermark.preview" = "미리보기";
+"settings.watermark.rememberText" = "마지막에 사용한 워터마크 텍스트 기억하기";
+"settings.watermark.resetFont" = "시스템 기본 폰트로 되돌리기";
+"settings.watermark.logoSection" = "저장된 로고 (반복 사용)";
+"settings.watermark.logoEmpty" = "자주 쓰는 로고 PNG를 저장해 두면 편집기 워터마크에서 바로 고를 수 있어요.";
+"settings.watermark.addLogo" = "로고 PNG 추가…";
+"settings.watermark.delete" = "삭제";
+"settings.watermark.pickLogoMessage" = "워터마크로 반복 사용할 로고 이미지를 고르세요.";
+
+/* Settings — storage */
+"settings.storage.autoDeleteSection" = "자동 삭제";
+"settings.storage.autoDeletePicker" = "오래된 스크린샷 자동 삭제";
+"settings.storage.autoDelete.off" = "사용 안 함 (영구 보관)";
+"settings.storage.autoDelete.days" = "%d일 지나면 삭제";
+"settings.storage.autoDelete.offNote" = "스크린샷을 자동으로 지우지 않습니다. 폴더가 계속 커질 수 있어요.";
+"settings.storage.autoDelete.onNote" = "%d일이 지난 스크린샷은 휴지통으로 보냅니다. (휴지통에서 복구 가능)";
+"settings.storage.locationSection" = "저장 위치";
+"settings.storage.currentFolder" = "현재 폴더";
+"settings.storage.changeFolder" = "폴더 변경…";
+"settings.storage.resetFolder" = "기본 위치로 되돌리기";
+"settings.storage.sharedWarning" = "주의: 이 폴더에는 PICkle가 찍지 않은 다른 이미지도 그리드에 함께 보이고, ‘모두 비우기(Clear all)’ 시 그 이미지들도 함께 휴지통으로 갑니다. 전용 폴더 사용을 권장합니다.";
+"settings.storage.usePanelPrompt" = "이 폴더 사용";
+"settings.storage.usePanelMessage" = "스크린샷을 저장할 폴더를 고르세요. (전용 폴더를 권장합니다)";
+"settings.storage.confirmFolder.message" = "이 폴더를 보관함으로 사용할까요?";
+"settings.storage.confirmFolder.use" = "이 폴더 사용";
+"settings.storage.warningNormal1" = "이 폴더 안의 모든 이미지가 PICkle 히스토리에 함께 보이고, ";
+"settings.storage.warningDanger" = "‘모두 비우기’를 누르면 함께 휴지통으로 이동합니다.";
+"settings.storage.warningNormal2" = " 다른 파일이 섞이지 않은 전용 폴더를 권장합니다.";
+
+/* Settings — about */
+"settings.about.tagline" = "스크린샷 캡처·편집·보관 🥒";
+
+/* Settings — language */
+"settings.language.section" = "언어";
+"settings.language" = "언어";
+"settings.language.system" = "시스템";
+"settings.language.korean" = "한국어";
+"settings.language.english" = "English";

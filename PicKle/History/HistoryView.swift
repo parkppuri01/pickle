@@ -1,10 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// The history panel content. Shows a thumbnail grid of the `pickle bottle`
+/// The history panel content. Shows a thumbnail grid of the `PICkle bottle`
 /// folder, or a friendly empty state when there's nothing yet.
 struct HistoryView: View {
     @ObservedObject var vm: HistoryViewModel
+    @ObservedObject private var loc = LocalizationManager.shared
     @State private var selectedID: String?
 
     private let columns = [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 10)]
@@ -43,7 +44,7 @@ struct HistoryView: View {
     private var titleBar: some View {
         HStack(spacing: 8) {
             Image("MenuBarIcon").resizable().frame(width: 18, height: 18)
-            Text("PIC.kle Bottle History")
+            Text(L("history.title"))
                 .font(.system(size: 13, weight: .semibold))
             Spacer()
             if !vm.screenshots.isEmpty {
@@ -72,8 +73,8 @@ struct HistoryView: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help(vm.isLocked ? "잠금: 다른 창을 눌러도 닫히지 않아요 (✕로 닫기)"
-                          : "잠금 해제: 다른 창을 누르면 닫혀요")
+        .help(vm.isLocked ? L("history.lock.lockedHelp")
+                          : L("history.lock.unlockedHelp"))
     }
 
     private var closeButton: some View {
@@ -86,7 +87,7 @@ struct HistoryView: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help("닫기")
+        .help(L("history.close"))
     }
 
     @ViewBuilder
@@ -116,11 +117,14 @@ struct HistoryView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Text("🥒").font(.system(size: 46))
-            Text("아직 저장된 스크린샷이 없어요")
+            Image("HistoryEmptyArt")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 150, height: 150)
+            Text(L("history.empty.title"))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
-            Text("⇧ + ⌥ + S 로 첫 스크린샷을 찍어보세요")
+            Text(L("history.empty.hint"))
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
         }
@@ -128,14 +132,14 @@ struct HistoryView: View {
 
     private var footer: some View {
         HStack {
-            Button("Clear all") {
+            Button(L("history.clearAll")) {
                 NotificationCenter.default.post(name: .pickleClearAll, object: nil)
             }
             .buttonStyle(.plain)
             .foregroundStyle(vm.screenshots.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(AppColors.accent))
             .disabled(vm.screenshots.isEmpty)
             Spacer()
-            Button("Settings") {
+            Button(L("history.settings")) {
                 NotificationCenter.default.post(name: .pickleOpenSettings, object: nil)
             }
             .buttonStyle(.plain)
@@ -180,7 +184,7 @@ private struct ThumbnailCell: View {
         // Double-click opens the editor; single-click selects; the 🍕 button copies.
         .onTapGesture(count: 2) { onEdit() }
         .onTapGesture(count: 1) { onSelect() }
-        .help("더블클릭: 편집 · 🍕: 복사 · 드래그: 다른 앱으로 꺼내기")
+        .help(L("history.thumb.help"))
         // Key on date too so an edit (new mtime) reloads the thumbnail even
         // though the path (cell identity) is unchanged.
         .task(id: "\(shot.id)|\(shot.date.timeIntervalSince1970)") {
@@ -195,7 +199,7 @@ private struct ThumbnailCell: View {
                 .foregroundStyle(.white, .black.opacity(0.55))
         }
         .buttonStyle(.plain)
-        .help("삭제 (휴지통)")
+        .help(L("history.thumb.delete"))
     }
 
     /// 🍕 copy button — copies to the clipboard (PizzaClip catches it if running),
@@ -212,7 +216,7 @@ private struct ThumbnailCell: View {
                 .background(.black.opacity(0.55), in: Circle())
         }
         .buttonStyle(.plain)
-        .help("복사 (PizzaClip으로)")
+        .help(L("history.thumb.copy"))
     }
 
     private var thumbnail: some View {

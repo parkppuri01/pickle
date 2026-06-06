@@ -6,7 +6,7 @@ import AppKit
 enum WatermarkPresets {
     private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "tiff"]
 
-    /// `~/Library/Application Support/PicKle/watermark-logos` (auto-created).
+    /// `~/Library/Application Support/PICkle/watermark-logos` (auto-created).
     static var directory: URL {
         let dir = AppPaths.supportDirectory.appendingPathComponent("watermark-logos", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -34,7 +34,7 @@ enum WatermarkPresets {
     static func add(from source: URL) -> URL? {
         let dest = uniqueURL(forName: source.lastPathComponent)
         do { try FileManager.default.copyItem(at: source, to: dest); return dest }
-        catch { NSLog("PicKle preset add failed: \(error)"); return nil }
+        catch { NSLog("PICkle preset add failed: \(error)"); return nil }
     }
 
     /// Remove a saved preset (permanently — these are app-private copies).

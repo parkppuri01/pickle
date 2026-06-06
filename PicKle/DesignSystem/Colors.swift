@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// PIC.kle brand palette — the pickle-green sibling of pizzaClip's brick-red set.
+/// PICkle brand palette — the pickle-green sibling of pizzaClip's brick-red set.
 ///
 /// We inherit pizzaClip's *color-role structure* (accent / amber / amberFill /
 /// inkOnAmber) and its adaptive light/dark pairing, swapping only the hex values
