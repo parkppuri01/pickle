@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = HistoryViewModel()
     private lazy var panelController = HistoryPanelController(viewModel: viewModel)
     private let editorController = EditorWindowController()
+    private let regionSelect = RegionSelectController()
     private var retentionTimer: Timer?
     // Auto-update (pizzaClip pattern). One updater instance for the app's whole
     // lifetime — starts immediately, checks every SUScheduledCheckInterval (24h)
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runRetentionSweep()
         scheduleRetentionSweep()
         refreshStatusIcon()
+        CaptureService.shared.warmUp()
     }
 
     // MARK: - Retention (auto-delete)
@@ -58,29 +60,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Capture
 
     private func setUpShortcuts() {
-        // ⇧⌥S: normal capture → save straight to the bottle folder.
+        // Each shortcut now opens the capture-ready bar with its own mode
+        // pre-highlighted; the user confirms (or switches) before the region
+        // drag. ⇧⌥S → save, ⇧⌥D → editor, ⇧⌥A → clipboard.
         KeyboardShortcuts.onKeyDown(for: .captureNormal) { [weak self] in
-            self?.performCapture(openEditor: false)
+            self?.presentCaptureMenu(.save)
         }
-        // ⇧⌥D: feature capture → save, then open the editor on the result.
         KeyboardShortcuts.onKeyDown(for: .captureFeature) { [weak self] in
-            self?.performCapture(openEditor: true)
+            self?.presentCaptureMenu(.editor)
         }
-        // ⇧⌥A: clipboard capture → straight to the clipboard, NOT saved to the
-        // bottle. pizzaClip (if running) catches it off the clipboard.
-        KeyboardShortcuts.onKeyDown(for: .captureClipboard) {
-            CaptureService.shared.captureInteractiveToClipboard { _ in }
+        KeyboardShortcuts.onKeyDown(for: .captureClipboard) { [weak self] in
+            self?.presentCaptureMenu(.clipboard)
         }
     }
 
-    /// Captures interactively. The file lands in `PICkle bottle` immediately
-    /// (so it's never lost even if the editor is cancelled); when `openEditor`
-    /// is true we then open the editor on it.
-    private func performCapture(openEditor: Bool) {
-        CaptureService.shared.captureInteractive { [weak self] url in
-            guard let self, let url else { return }   // nil = user cancelled
-            NotificationCenter.default.post(name: .pickleScreenshotsChanged, object: nil)
-            if openEditor { self.editorController.open(url: url) }
+    /// Start the ⇧⌘5-style selection overlay with `mode` pre-highlighted. The
+    /// crosshair is live immediately; the floating bar lets the user switch mode
+    /// before dragging. On commit we capture the chosen rect for the chosen mode.
+    private func presentCaptureMenu(_ mode: CaptureMode) {
+        regionSelect.begin(
+            preselect: mode,
+            anchorRect: statusItemFrame,
+            onComplete: { [weak self] chosen, cocoaRect in self?.runRegionCapture(chosen, cocoaRect) },
+            onCancel: {})
+    }
+
+    /// Capture the selected rectangle for the chosen mode. Save/editor land in
+    /// `PICkle bottle`; clipboard writes nothing to the bottle.
+    private func runRegionCapture(_ mode: CaptureMode, _ cocoaRect: CGRect) {
+        switch mode {
+        case .clipboard:
+            CaptureService.shared.captureRegionToClipboard(cocoaRect: cocoaRect) { _ in }
+        case .save:
+            CaptureService.shared.captureRegionToFile(cocoaRect: cocoaRect) { [weak self] url in
+                guard let self, let url else { return }
+                NotificationCenter.default.post(name: .pickleScreenshotsChanged, object: nil)
+                self.flourishAfterSave(url: url, startRect: cocoaRect)
+            }
+        case .editor:
+            CaptureService.shared.captureRegionToFile(cocoaRect: cocoaRect) { [weak self] url in
+                guard let self, let url else { return }
+                NotificationCenter.default.post(name: .pickleScreenshotsChanged, object: nil)
+                self.editorController.open(url: url)
+            }
+        }
+    }
+
+    /// Save-capture flourish: the captured image shrinks from where it was
+    /// captured up into the menu-bar icon, then the history popup opens.
+    private func flourishAfterSave(url: URL, startRect: CGRect) {
+        CaptureFlyAnimation.play(imageURL: url, startRect: startRect, anchorRect: statusItemFrame) { [weak self] in
+            guard let self else { return }
+            self.panelController.openIfNeeded(anchorRect: self.statusItemFrame)
         }
     }
 

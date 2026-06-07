@@ -28,9 +28,18 @@ final class HistoryPanelController {
         if let o = resignKeyObserver { NotificationCenter.default.removeObserver(o) }
     }
 
+    var isVisible: Bool { panel?.isVisible == true }
+
     /// Show if hidden, hide if visible.
     func toggle(anchorRect: NSRect?) {
         if let panel, panel.isVisible { close(); return }
+        show(anchorRect: anchorRect)
+    }
+
+    /// Open the panel only if it isn't already showing (avoids stacking a second
+    /// panel when something — e.g. a save-capture — wants it open).
+    func openIfNeeded(anchorRect: NSRect?) {
+        guard !isVisible else { return }
         show(anchorRect: anchorRect)
     }
 

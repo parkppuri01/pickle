@@ -57,8 +57,15 @@ final class EditorModel: ObservableObject {
     let imagePixelSize: CGSize
     let displaySize: CGSize
     let fileURL: URL
+    /// Byte size of the original file, read once at init (the editor shows it and
+    /// it can't change mid-edit — avoids a per-frame stat on the main thread).
+    let originalByteCount: Int
 
     @Published var tool: Tool = .pen
+
+    /// Bumps to a new UUID each time the 🥒 easter-egg should fire. The editor's
+    /// `PickleBurst` overlay watches this; nil = no burst has happened yet.
+    @Published var pickleBurstID: UUID?
 
     /// Chronological pen/blur history for unified ⌘Z undo.
     @Published private(set) var undoStack: [EditAction] = []
@@ -112,6 +119,7 @@ final class EditorModel: ObservableObject {
     init?(fileURL: URL) {
         guard let img = NSImage(contentsOf: fileURL) else { return nil }
         self.fileURL = fileURL
+        self.originalByteCount = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         self.baseImage = img
         let px = img.representations.first.map {
             CGSize(width: $0.pixelsWide, height: $0.pixelsHigh)
@@ -150,6 +158,18 @@ final class EditorModel: ObservableObject {
         switch last {
         case .pen:  if !strokes.isEmpty { strokes.removeLast() }
         case .blur: if !blurRegions.isEmpty { blurRegions.removeLast() }
+        }
+    }
+
+    // MARK: - Easter egg
+
+    /// Fire the 🥒 burst when the watermark text is *exactly* a trigger word
+    /// (trimmed). Mirrors pizzaClip's exact-match rule — substring matching was
+    /// too eager. "pickle" is case-insensitive; "피클" needs no case folding.
+    func maybeTriggerBurst(for text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased() == "pickle" || trimmed == "피클" {
+            pickleBurstID = UUID()
         }
     }
 

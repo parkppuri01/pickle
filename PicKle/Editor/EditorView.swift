@@ -12,17 +12,38 @@ struct EditorView: View {
     @State private var textDragStart: CGPoint?
     @State private var logoDragStart: CGPoint?
     @State private var hoverLocation: CGPoint?   // for the blur brush/area guide
+    @State private var snapGuideV: CGFloat?      // x of the vertical guide line while snapping
+    @State private var snapGuideH: CGFloat?      // y of the horizontal guide line while snapping
     /// Watermark font family chosen in Settings ("" = system bold).
     @AppStorage(EditorModel.fontDefaultsKey) private var watermarkFontFamily = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbarTop
-            toolbarTools
-            Divider()
-            canvas
+        HStack(spacing: 0) {
+            toolRail
+            VStack(spacing: 0) {
+                topBar
+                Divider().opacity(0.15)
+                canvasArea
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: max(model.displaySize.width, 600))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Palette.windowBG)
+        .environment(\.colorScheme, .dark)
+    }
+
+    // MARK: - Layout / palette tokens (editor-local, dark theme)
+
+    private enum Layout {
+        static let railWidth: CGFloat = 56
+        static let canvasPadding: CGFloat = 24
+    }
+    private enum Palette {
+        static let windowBG = Color(red: 0.13, green: 0.13, blue: 0.14)
+        static let canvasBG = Color(red: 0.075, green: 0.075, blue: 0.085)
+        static let railBG = Color(red: 0.10, green: 0.10, blue: 0.11)
+        static let icon = Color.white.opacity(0.85)
+        static let iconDim = Color.white.opacity(0.28)
     }
 
     // MARK: - Canvas
@@ -70,6 +91,17 @@ struct EditorView: View {
                         }
                     }
                 }
+
+                // Watermark snap guides: the edge/center line the dragged
+                // watermark is currently snapping to (set by applySnap).
+                if let vx = snapGuideV {
+                    var v = Path(); v.move(to: CGPoint(x: vx, y: 0)); v.addLine(to: CGPoint(x: vx, y: model.displaySize.height))
+                    strokeGuide(v, in: ctx, emphasized: true)
+                }
+                if let hy = snapGuideH {
+                    var h = Path(); h.move(to: CGPoint(x: 0, y: hy)); h.addLine(to: CGPoint(x: model.displaySize.width, y: hy))
+                    strokeGuide(h, in: ctx, emphasized: true)
+                }
             }
             .frame(width: model.displaySize.width, height: model.displaySize.height)
             .gesture(
@@ -104,9 +136,21 @@ struct EditorView: View {
             // Logo sits under the text (matches the save pipeline order).
             logoOverlay
             textOverlay
+
+            // Easter egg: 🥒 confetti when the watermark text is exactly
+            // "pickle"/"피클". Sits on top of everything but ignores hits so the
+            // canvas stays interactive while pickles fly.
+            PickleBurst(trigger: model.pickleBurstID)
+                .frame(width: model.displaySize.width, height: model.displaySize.height)
+                .allowsHitTesting(false)
         }
         .frame(width: model.displaySize.width, height: model.displaySize.height)
         .background(Color.black.opacity(0.04))
+        .clipped()   // keep flying pickles inside the canvas
+        // Fire the burst the moment the text becomes exactly a trigger word.
+        .onChange(of: model.textWM.text) { newValue in
+            model.maybeTriggerBurst(for: newValue)
+        }
     }
 
     @ViewBuilder
@@ -145,10 +189,11 @@ struct EditorView: View {
             .onChanged { value in
                 if textDragStart == nil { textDragStart = model.textWM.center }
                 guard let start = textDragStart else { return }
-                model.textWM.center = CGPoint(x: start.x + value.translation.width,
-                                              y: start.y + value.translation.height)
+                let raw = CGPoint(x: start.x + value.translation.width,
+                                  y: start.y + value.translation.height)
+                model.textWM.center = applySnap(to: raw)
             }
-            .onEnded { _ in textDragStart = nil }
+            .onEnded { _ in textDragStart = nil; clearSnapGuides() }
     }
 
     private var logoDrag: some Gesture {
@@ -156,11 +201,40 @@ struct EditorView: View {
             .onChanged { value in
                 if logoDragStart == nil { logoDragStart = model.logoWM?.center }
                 guard let start = logoDragStart else { return }
-                model.logoWM?.center = CGPoint(x: start.x + value.translation.width,
-                                               y: start.y + value.translation.height)
+                let raw = CGPoint(x: start.x + value.translation.width,
+                                  y: start.y + value.translation.height)
+                model.logoWM?.center = applySnap(to: raw)
             }
-            .onEnded { _ in logoDragStart = nil }
+            .onEnded { _ in logoDragStart = nil; clearSnapGuides() }
     }
+
+    // MARK: - Watermark snapping (magnetic alignment guides)
+
+    /// Snap a dragged watermark center to the nearest of the 9 anchor points —
+    /// the three x's {inset, middle, width−inset} × three y's {inset, middle,
+    /// height−inset} (corners, edge-midpoints, center). Each axis snaps
+    /// independently: if the center is within `threshold` of an anchor's x (or y),
+    /// that coordinate snaps and the matching guide line is shown. Coordinates are
+    /// in displaySize space, matching `textWM.center` / `logoWM.center`.
+    private func applySnap(to center: CGPoint) -> CGPoint {
+        let inset: CGFloat = 24
+        let threshold: CGFloat = 12
+        let w = model.displaySize.width, h = model.displaySize.height
+        let xs: [CGFloat] = [inset, w / 2, w - inset]
+        let ys: [CGFloat] = [inset, h / 2, h - inset]
+
+        var cx = center.x, cy = center.y
+        var gv: CGFloat? = nil, gh: CGFloat? = nil
+        if let nx = xs.min(by: { abs($0 - center.x) < abs($1 - center.x) }),
+           abs(nx - center.x) <= threshold { cx = nx; gv = nx }
+        if let ny = ys.min(by: { abs($0 - center.y) < abs($1 - center.y) }),
+           abs(ny - center.y) <= threshold { cy = ny; gh = ny }
+        snapGuideV = gv
+        snapGuideH = gh
+        return CGPoint(x: cx, y: cy)
+    }
+
+    private func clearSnapGuides() { snapGuideV = nil; snapGuideH = nil }
 
     /// Reveal the blurred/pixellated image only inside a region's shape.
     private func drawBlur(_ kind: BlurRegion.Kind, style: EditorModel.BlurStyle, in ctx: GraphicsContext) {
@@ -208,28 +282,80 @@ struct EditorView: View {
         )
     }
 
-    // MARK: - Toolbar (row 1: tool picker + actions)
+    // MARK: - Left tool rail (vertical icons)
 
-    private var toolbarTop: some View {
-        HStack(spacing: 10) {
-            Picker("", selection: $model.tool) {
-                Text(L("editor.tool.pen")).tag(EditorModel.Tool.pen)
-                Text(L("editor.tool.blur")).tag(EditorModel.Tool.blur)
-                Text(L("editor.tool.watermark")).tag(EditorModel.Tool.watermark)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 230, alignment: .leading)
-            .labelsHidden()
-
+    private var toolRail: some View {
+        VStack(spacing: 8) {
+            railTool(.pen, system: "pencil.tip")
+            railTool(.blur, system: "drop.fill")
+            railTool(.watermark, system: "textformat")
             Spacer()
-
             // Unified ⌘Z undo: removes the most recent pen stroke or blur region
             // in the order they were drawn, regardless of the current tool.
-            Button { model.undoLast() } label: { Image(systemName: "arrow.uturn.backward") }
-                .disabled(!model.canUndo)
-                .help(L("editor.undo.help"))
+            railIcon(system: "arrow.uturn.backward", enabled: model.canUndo,
+                     help: L("editor.undo.help")) { model.undoLast() }
                 .keyboardShortcut("z", modifiers: .command)
+        }
+        .padding(.vertical, 12)
+        .frame(width: Layout.railWidth)
+        .frame(maxHeight: .infinity)
+        .background(Palette.railBG)
+        .noFocusRing()   // no blue keyboard-focus ring on the first tool button
+    }
 
+    /// A tool selector in the rail — filled with the accent when active.
+    private func railTool(_ tool: EditorModel.Tool, system: String) -> some View {
+        let selected = model.tool == tool
+        return Button { model.tool = tool } label: {
+            Image(systemName: system)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(selected ? Color.black.opacity(0.85) : Palette.icon)
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(selected ? AppColors.accent : Color.clear))
+                .contentShape(Rectangle())   // whole 40×40 box is clickable, not just the glyph
+        }
+        .buttonStyle(.plain)
+        .help(toolHelp(tool))
+    }
+
+    /// A plain action icon in the rail (e.g. undo).
+    private func railIcon(system: String, enabled: Bool, help: String,
+                          action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(enabled ? Palette.icon : Palette.iconDim)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())   // whole 40×40 box is clickable, not just the glyph
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(help)
+    }
+
+    private func toolHelp(_ tool: EditorModel.Tool) -> String {
+        switch tool {
+        case .pen: return L("editor.tool.pen")
+        case .blur: return L("editor.tool.blur")
+        case .watermark: return L("editor.tool.watermark")
+        }
+    }
+
+    // MARK: - Top bar (selected tool's options + Cancel / Save)
+
+    private var topBar: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Group {
+                switch model.tool {
+                case .pen: penControls
+                case .blur: blurControls
+                case .watermark: watermarkControls
+                }
+            }
+            Spacer(minLength: 8)
+            imageInfoBadge
             Button(L("editor.cancel"), role: .cancel) { onClose() }
             Button(L("editor.save")) {
                 if model.save() {
@@ -239,24 +365,51 @@ struct EditorView: View {
             }
             .keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 56)
     }
 
-    // MARK: - Toolbar (row 2: tool-specific controls)
-
-    @ViewBuilder
-    private var toolbarTools: some View {
-        Divider()
-        Group {
-            switch model.tool {
-            case .pen: penControls
-            case .blur: blurControls
-            case .watermark: watermarkControls
-            }
+    /// Top-right info: original pixel size · file size · extension.
+    private var imageInfoBadge: some View {
+        let px = model.imagePixelSize
+        let ext = model.fileURL.pathExtension.uppercased()
+        let bytes = model.originalByteCount
+        return VStack(alignment: .trailing, spacing: 1) {
+            Text("\(Int(px.width)) × \(Int(px.height)) px")
+                .font(.system(size: 11, weight: .semibold))
+                .monospacedDigit()
+            Text("\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) · \(ext)")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .fixedSize()
+    }
+
+    // MARK: - Canvas area (dark backdrop, image centered, auto-scaled to fit)
+
+    /// The canvas is authored at `model.displaySize` (fixed editing coordinates),
+    /// then scaled with `.scaleEffect` to fit the available area. scaleEffect is a
+    /// render/hit-test transform, so the pen/blur gesture coordinates inside
+    /// `canvas` stay in displaySize units — no coordinate math changes needed.
+    private var canvasArea: some View {
+        GeometryReader { geo in
+            let availW = max(geo.size.width - Layout.canvasPadding * 2, 1)
+            let availH = max(geo.size.height - Layout.canvasPadding * 2, 1)
+            let s = max(min(availW / model.displaySize.width,
+                            availH / model.displaySize.height, 1), 0.05)
+            ZStack {
+                CheckerboardBackground()
+                canvas
+                    .scaleEffect(s)
+                    .frame(width: model.displaySize.width * s,
+                           height: model.displaySize.height * s)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .shadow(color: .black.opacity(0.55), radius: 14, y: 5)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var penControls: some View {
@@ -279,7 +432,6 @@ struct EditorView: View {
                     .frame(width: w + 8, height: w + 8)
                     .onTapGesture { model.lineWidth = w }
             }
-            Spacer()
         }
     }
 
@@ -308,8 +460,7 @@ struct EditorView: View {
                 Image(systemName: "textformat.size").foregroundStyle(.secondary)
                 Slider(value: Binding(get: { Double(model.textWM.scale) },
                                       set: { model.textWM.scale = CGFloat($0) }),
-                       in: 0.4...3).frame(width: 70).help(L("editor.text.size.help"))
-                Spacer()
+                       in: 0.2...6).frame(width: 70).help(L("editor.text.size.help"))
             }
 
             // Logo row.
@@ -331,9 +482,8 @@ struct EditorView: View {
                     Image(systemName: "textformat.size").foregroundStyle(.secondary)
                     Slider(value: Binding(get: { Double(model.logoWM?.scale ?? 1) },
                                           set: { model.logoWM?.scale = CGFloat($0) }),
-                           in: 0.4...3).frame(width: 70).help(L("editor.logo.size.help"))
+                           in: 0.2...6).frame(width: 70).help(L("editor.logo.size.help"))
                 }
-                Spacer()
             }
         }
     }
@@ -384,8 +534,6 @@ struct EditorView: View {
             Image(systemName: "drop.fill").foregroundStyle(.secondary)
             Slider(value: $model.blurIntensity, in: 0...1).frame(width: 90)
                 .help(L("editor.blur.intensity.help"))
-
-            Spacer()
         }
     }
 
@@ -396,6 +544,35 @@ struct EditorView: View {
         panel.canChooseDirectories = false
         if panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url) {
             model.setLogo(img)
+        }
+    }
+}
+
+private extension View {
+    /// Remove SwiftUI's blue keyboard-focus ring (macOS 14+; no-op on 13).
+    @ViewBuilder func noFocusRing() -> some View {
+        if #available(macOS 14.0, *) { focusEffectDisabled() } else { self }
+    }
+}
+
+/// A dark checkerboard drawn behind the editor image so a fully-black (or fully
+/// white) screenshot stays visually distinct from the canvas backdrop
+/// (matches guide/편집팝업예시.png).
+struct CheckerboardBackground: View {
+    var tile: CGFloat = 14
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.16)))
+            let cols = Int((size.width / tile).rounded(.up))
+            let rows = Int((size.height / tile).rounded(.up))
+            guard cols > 0, rows > 0 else { return }
+            for r in 0..<rows {
+                for c in 0..<cols where (r + c) % 2 == 0 {
+                    ctx.fill(Path(CGRect(x: CGFloat(c) * tile, y: CGFloat(r) * tile,
+                                         width: tile, height: tile)),
+                             with: .color(Color(white: 0.22)))
+                }
+            }
         }
     }
 }

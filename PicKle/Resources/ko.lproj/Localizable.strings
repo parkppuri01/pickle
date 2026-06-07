@@ -7,6 +7,12 @@
 "menu.checkForUpdates" = "업데이트 확인…";
 "menu.quit" = "PICkle 종료";
 
+/* ===== Capture-ready bar (CaptureModeBar) ===== */
+"capture.mode.clipboard" = "클립보드";
+"capture.mode.save" = "저장";
+"capture.mode.editor" = "편집";
+"capture.mode.cancel" = "취소";
+
 /* ===== Clear-all alert (AppDelegate) ===== */
 "alert.clearAll.message" = "스크린샷 %d개를 모두 휴지통으로 보낼까요?";
 "alert.clearAll.info" = "‘PICkle bottle’ 폴더의 이미지가 휴지통으로 이동합니다. (휴지통에서 복구 가능)";

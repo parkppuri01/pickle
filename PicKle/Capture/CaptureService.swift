@@ -1,76 +1,128 @@
 import AppKit
+import ScreenCaptureKit
 
-/// Wraps macOS's built-in `/usr/sbin/screencapture` tool (HANDOFF decision:
-/// reuse Apple's capture UI rather than building our own selection overlay).
+/// Region capture for the custom ⇧⌘5-style overlay.
 ///
-/// `-i` = interactive: the user drags a region, or presses Space to switch to
-/// window mode, or Esc to cancel. On cancel no file is written, so we report
-/// `nil` and the caller does nothing.
-///
-/// This is a `class` (not an `enum`) on purpose: an interactive capture runs for
-/// several seconds while the user drags, and we must keep the `Process` alive
-/// the whole time so its `terminationHandler` actually fires. We retain each
-/// in-flight process and drop it only once it finishes.
+/// Capture path = **ScreenCaptureKit** (`SCScreenshotManager`). On modern macOS
+/// (Sequoia/Tahoe+) this is the only reliable option: `CGWindowListCreateImage`
+/// returns a blank image, and shelling out to `/usr/sbin/screencapture` fails
+/// ("could not create image from rect") because the spawned process does NOT
+/// inherit PICkle's Screen Recording grant — the in-process SCK API uses our own
+/// TCC permission. macOS 13 falls back to Quartz (`captureLegacy`).
 final class CaptureService {
     static let shared = CaptureService()
     private init() {}
 
-    private var inFlight: [Process] = []
-
-    /// Run an interactive capture, saving a PNG into the `PICkle bottle` folder.
-    /// Calls `completion` on the main queue with the saved file URL, or `nil` if
-    /// the user cancelled / the capture failed.
-    func captureInteractive(completion: @escaping (URL?) -> Void) {
-        let url = uniqueURL()
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        // -i interactive, -o no window shadow (window mode), then destination.
-        task.arguments = ["-i", "-o", url.path]
-        task.terminationHandler = { [weak self] proc in
-            // Success = clean exit AND a file actually landed (Esc → no file).
-            let ok = proc.terminationStatus == 0
-                && FileManager.default.fileExists(atPath: url.path)
-            DispatchQueue.main.async {
-                self?.inFlight.removeAll { $0 === proc }
-                completion(ok ? url : nil)
-            }
-        }
-
-        do {
-            inFlight.append(task)
-            try task.run()
-        } catch {
-            NSLog("PICkle capture failed to launch screencapture: \(error)")
-            inFlight.removeAll { $0 === task }
-            DispatchQueue.main.async { completion(nil) }
+    /// Warm up ScreenCaptureKit so the first capture after launch isn't empty —
+    /// the capture daemon needs a beat to enumerate displays after the app starts.
+    func warmUp() {
+        if #available(macOS 14.0, *) {
+            Task { _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) }
         }
     }
 
-    /// Run an interactive capture straight to the **clipboard** (`-c`), without
-    /// writing any file into the bottle folder. If pizzaClip is running it will
-    /// pick the image up off the clipboard. Calls `completion(true)` once the
-    /// capture finishes successfully, `false` if the user cancelled / it failed.
-    func captureInteractiveToClipboard(completion: @escaping (Bool) -> Void) {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        // -i interactive, -c to clipboard, -o no window shadow.
-        task.arguments = ["-i", "-c", "-o"]
-        task.terminationHandler = { [weak self] proc in
-            let ok = proc.terminationStatus == 0
-            DispatchQueue.main.async {
-                self?.inFlight.removeAll { $0 === proc }
-                completion(ok)
+    // MARK: - Region capture (custom selection overlay → ScreenCaptureKit)
+
+    /// Capture a fixed rectangle (no interaction) into the bottle folder.
+    /// `cocoaRect` is in global Cocoa coordinates (bottom-left origin).
+    func captureRegionToFile(cocoaRect: CGRect, completion: @escaping (URL?) -> Void) {
+        captureRegionImage(cocoaRect: cocoaRect) { [weak self] cg in
+            guard let self else { completion(nil); return }
+            guard let cg else { completion(nil); return }
+            let url = self.uniqueURL()
+            // PNG encode + disk write off the main thread — a large Retina capture
+            // can otherwise block the UI for a noticeable beat. Result back on main.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let rep = NSBitmapImageRep(cgImage: cg)
+                var saved = false
+                if let png = rep.representation(using: .png, properties: [:]) {
+                    do { try png.write(to: url); saved = true }
+                    catch { NSLog("PICkle capture write failed: \(error)") }
+                }
+                DispatchQueue.main.async { completion(saved ? url : nil) }
             }
         }
-        do {
-            inFlight.append(task)
-            try task.run()
-        } catch {
-            NSLog("PICkle clipboard capture failed to launch screencapture: \(error)")
-            inFlight.removeAll { $0 === task }
-            DispatchQueue.main.async { completion(false) }
+    }
+
+    /// Capture a fixed rectangle straight to the clipboard (NOT saved).
+    func captureRegionToClipboard(cocoaRect: CGRect, completion: @escaping (Bool) -> Void) {
+        captureRegionImage(cocoaRect: cocoaRect) { cg in
+            guard let cg else { completion(false); return }
+            let rep = NSBitmapImageRep(cgImage: cg)
+            // The rep is in PIXELS; set its POINT size to the logical selection so
+            // a Retina capture pastes at the right physical size (not 2×). It's the
+            // rep's own size that survives the pasteboard round-trip, not NSImage's.
+            rep.size = NSSize(width: cocoaRect.width, height: cocoaRect.height)
+            let image = NSImage(size: rep.size)
+            image.addRepresentation(rep)
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            completion(pb.writeObjects([image]))
         }
+    }
+
+    /// Capture `cocoaRect` (global Cocoa, bottom-left origin) to a CGImage,
+    /// delivering the result on the main queue.
+    private func captureRegionImage(cocoaRect: CGRect, completion: @escaping (CGImage?) -> Void) {
+        if #available(macOS 14.0, *) {
+            Task { @MainActor in completion(await Self.captureSCK(cocoaRect: cocoaRect)) }
+        } else {
+            completion(Self.captureLegacy(cocoaRect: cocoaRect))
+        }
+    }
+
+    /// ScreenCaptureKit path (macOS 14+) — the only one that yields real pixels on
+    /// modern macOS, using PICkle's own Screen Recording grant.
+    @available(macOS 14.0, *)
+    private static func captureSCK(cocoaRect: CGRect) async -> CGImage? {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            // The screen the selection's CENTER lands on (intersects can pick the
+            // wrong one when a rect straddles a monitor edge).
+            let center = CGPoint(x: cocoaRect.midX, y: cocoaRect.midY)
+            guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) })
+                    ?? NSScreen.screens.first(where: { $0.frame.intersects(cocoaRect) })
+                    ?? NSScreen.main else { return nil }
+            // NSScreenNumber is an NSNumber; a direct `as? CGDirectDisplayID`
+            // (UInt32) cast returns nil — go through uint32Value. Match the EXACT
+            // SCDisplay; never fall back to the first display (that captured a blank
+            // rect from the wrong monitor — the original main-display bug).
+            let sid = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+            guard let display = content.displays.first(where: { $0.displayID == sid }) else { return nil }
+
+            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let config = SCStreamConfiguration()
+            // sourceRect: display-local, top-left origin, in points.
+            let local = CGRect(x: cocoaRect.minX - screen.frame.minX,
+                               y: screen.frame.maxY - cocoaRect.maxY,
+                               width: cocoaRect.width, height: cocoaRect.height)
+            let scale = screen.backingScaleFactor
+            config.sourceRect = local
+            config.width = Int((local.width * scale).rounded())
+            config.height = Int((local.height * scale).rounded())
+            config.showsCursor = false
+            config.ignoreShadowsDisplay = true
+            config.captureResolution = .best
+            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        } catch {
+            NSLog("PICkle SCK capture error: \(error)")
+            return nil
+        }
+    }
+
+    /// Legacy fallback for macOS 13 (Quartz still returns real pixels there).
+    private static func captureLegacy(cocoaRect: CGRect) -> CGImage? {
+        let scRect = screencaptureRect(fromCocoaGlobal: cocoaRect)
+        return CGWindowListCreateImage(scRect, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
+    }
+
+    /// Convert a global Cocoa rect (origin bottom-left of the primary screen, y up)
+    /// to top-left origin space for the macOS 13 Quartz fallback.
+    private static func screencaptureRect(fromCocoaGlobal rect: CGRect) -> CGRect {
+        let primaryH = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height ?? rect.maxY
+        return CGRect(x: rect.minX.rounded(), y: (primaryH - rect.maxY).rounded(),
+                      width: rect.width.rounded(), height: rect.height.rounded())
     }
 
     /// A timestamped path in the bottle folder, guaranteed not to collide with an

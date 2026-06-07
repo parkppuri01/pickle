@@ -7,6 +7,12 @@
 "menu.checkForUpdates" = "Check for Updates…";
 "menu.quit" = "Quit PICkle";
 
+/* ===== Capture-ready bar (CaptureModeBar) ===== */
+"capture.mode.clipboard" = "Clipboard";
+"capture.mode.save" = "Save";
+"capture.mode.editor" = "Edit";
+"capture.mode.cancel" = "Cancel";
+
 /* ===== Clear-all alert (AppDelegate) ===== */
 "alert.clearAll.message" = "Move all %d screenshots to the Trash?";
 "alert.clearAll.info" = "Images in the ‘PICkle bottle’ folder will be moved to the Trash. (Recoverable from the Trash.)";
