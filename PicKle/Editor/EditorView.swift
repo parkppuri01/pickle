@@ -3,10 +3,19 @@ import AppKit
 import UniformTypeIdentifiers
 
 /// Reports the canvas's live fit-scale (set in canvasArea's GeometryReader) up to
-/// the toolbar, so the info badge can show the preview zoom %.
+/// the view, so the crop handles can stay a constant on-screen size no matter how
+/// far the canvas is scaled down to fit the window.
 private struct CanvasScaleKey: PreferenceKey {
     static let defaultValue: CGFloat = 1
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// A crop-box handle the user can drag: 4 corners, 4 edge midpoints, or the whole
+/// box (move). Drives the crop-rect math in `applyCropDrag`.
+private enum CropHandle {
+    case topLeft, topRight, bottomLeft, bottomRight
+    case top, bottom, left, right
+    case move
 }
 
 /// A small left-pointing triangle: the floating option popover's tail, aimed at
@@ -30,11 +39,6 @@ struct EditorView: View {
     @ObservedObject private var loc = LocalizationManager.shared
     var onClose: () -> Void
 
-    /// The current display's pixel scale (2 on Retina). Used so the zoom % badge
-    /// reads "100% = 1 image pixel : 1 screen pixel", like Preview.app — without
-    /// it the badge ignored Retina and always showed about half the real value.
-    @Environment(\.displayScale) private var displayScale
-
     @State private var textDragStart: CGPoint?
     @State private var logoDragStart: CGPoint?
     @State private var hoverLocation: CGPoint?   // for the blur brush/area guide
@@ -42,16 +46,22 @@ struct EditorView: View {
     @State private var snapGuideH: CGFloat?      // y of the horizontal guide line while snapping
     /// Watermark font family chosen in Settings ("" = system bold).
     @AppStorage(EditorModel.fontDefaultsKey) private var watermarkFontFamily = ""
-    /// Live preview zoom — the canvas's fit-scale, reported up from the canvas's
-    /// GeometryReader so the info badge can show "what % of actual size" we show.
+    /// The canvas's live fit-scale (displaySize → on-screen), reported up from the
+    /// canvas GeometryReader. Keeps the crop handles a constant on-screen size no
+    /// matter how far the canvas is scaled down.
     @State private var canvasScale: CGFloat = 1
     /// The floating tool-option popover shows on tool select and fades out ~2s
     /// after the pointer leaves it, so it stops covering the canvas.
     @State private var popoverVisible = true
     @State private var popoverHideTask: DispatchWorkItem?
-    /// Crop tool: the kept-region rectangle currently being dragged, in
-    /// display-space (top-left origin). nil = nothing selected yet.
+    /// Crop tool: the kept-region rectangle, in display-space (top-left origin).
+    /// nil = crop tool not active yet; it's seeded to the full image on entry.
     @State private var cropRect: CGRect?
+    /// Which crop handle (corner/edge/move) the current drag grabbed, plus the
+    /// crop rect captured at drag start — each frame is computed from that start,
+    /// not accumulated, so resizing stays stable.
+    @State private var cropDragHandle: CropHandle?
+    @State private var cropDragStartRect: CGRect?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,7 +76,9 @@ struct EditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.windowBG)
         // The selected tool's options float next to its rail icon (design "B").
-        .overlay(alignment: .topLeading) { optionsPopover }
+        // Crop is the exception — it has no popover; its control is the on-canvas
+        // Crop button that appears once the box is changed.
+        .overlay(alignment: .topLeading) { if model.tool != .crop { optionsPopover } }
         .environment(\.colorScheme, .dark)
     }
 
@@ -163,25 +175,37 @@ struct EditorView: View {
                         case .watermark:
                             break   // handled by each watermark overlay's own drag
                         case .crop:
-                            // Drag out the kept-region rectangle, clamped to the canvas.
-                            let s = value.startLocation, l = value.location
-                            let raw = CGRect(x: min(s.x, l.x), y: min(s.y, l.y),
-                                             width: abs(l.x - s.x), height: abs(l.y - s.y))
-                            cropRect = raw.intersection(CGRect(origin: .zero, size: model.displaySize))
+                            // Resize/move the existing crop box by whichever handle
+                            // the drag started on (corner, edge, or inside = move).
+                            if cropDragHandle == nil {
+                                let r = cropRect ?? CGRect(origin: .zero, size: model.displaySize)
+                                cropDragStartRect = r
+                                cropDragHandle = cropHandle(at: value.startLocation, in: r) ?? .move
+                            }
+                            if let h = cropDragHandle, let start = cropDragStartRect {
+                                cropRect = applyCropDrag(h, startRect: start,
+                                                         dx: value.translation.width,
+                                                         dy: value.translation.height)
+                            }
                         }
                     }
                     .onEnded { _ in
                         switch model.tool {
                         case .pen: model.commit()
                         case .blur: model.commitBlur()
-                        case .watermark, .crop: break   // crop keeps its rect until applied
+                        case .watermark: break
+                        case .crop: cropDragHandle = nil; cropDragStartRect = nil
                         }
                     }
             )
             .onContinuousHover(coordinateSpace: .local) { phase in
                 switch phase {
-                case .active(let loc): hoverLocation = loc
-                case .ended: hoverLocation = nil
+                case .active(let loc):
+                    hoverLocation = loc
+                    if model.tool == .crop { updateCropCursor(at: loc) }
+                case .ended:
+                    hoverLocation = nil
+                    if model.tool == .crop { NSCursor.arrow.set() }
                 }
             }
 
@@ -368,32 +392,119 @@ struct EditorView: View {
                    style: StrokeStyle(lineWidth: emphasized ? 1.5 : 1, dash: dash))
     }
 
-    /// Draw the crop tool's overlay: outside the kept rect is dimmed, with a
-    /// rule-of-thirds grid and a bright dashed border inside. Before a rect exists
-    /// (hover only) a crosshair shows where the drag will start.
+    /// Draw the crop tool's overlay: dim outside the kept rect, a rule-of-thirds
+    /// grid + thin border inside, and grab handles (corner L-shapes + edge bars)
+    /// like the macOS crop UI. Handle/line sizes are divided by `canvasScale` so
+    /// they stay a constant size on screen no matter how scaled-down the canvas is.
     private func drawCropOverlay(in ctx: GraphicsContext) {
+        guard let r = cropRect, r.width > 1, r.height > 1 else { return }
         let full = CGRect(origin: .zero, size: model.displaySize)
-        if let r = cropRect, r.width > 1, r.height > 1 {
-            // Dim outside: fill the whole canvas, punch out the kept rect (even-odd).
-            var outside = Path(full)
-            outside.addPath(Path(r))
-            ctx.fill(outside, with: .color(.black.opacity(0.5)), style: FillStyle(eoFill: true))
-            // Rule-of-thirds grid inside the kept rect.
-            var grid = Path()
-            for i in 1...2 {
-                let x = r.minX + r.width * CGFloat(i) / 3
-                grid.move(to: CGPoint(x: x, y: r.minY)); grid.addLine(to: CGPoint(x: x, y: r.maxY))
-                let y = r.minY + r.height * CGFloat(i) / 3
-                grid.move(to: CGPoint(x: r.minX, y: y)); grid.addLine(to: CGPoint(x: r.maxX, y: y))
-            }
-            ctx.stroke(grid, with: .color(.white.opacity(0.3)), lineWidth: 0.5)
-            strokeGuide(Path(r), in: ctx, emphasized: true)
-        } else if let p = hoverLocation {
-            var v = Path(); v.move(to: CGPoint(x: p.x, y: 0)); v.addLine(to: CGPoint(x: p.x, y: model.displaySize.height))
-            var h = Path(); h.move(to: CGPoint(x: 0, y: p.y)); h.addLine(to: CGPoint(x: model.displaySize.width, y: p.y))
-            strokeGuide(v, in: ctx, emphasized: false)
-            strokeGuide(h, in: ctx, emphasized: false)
+        let s = max(canvasScale, 0.05)
+        // Dim outside: fill the whole canvas, punch out the kept rect (even-odd).
+        var outside = Path(full)
+        outside.addPath(Path(r))
+        ctx.fill(outside, with: .color(.black.opacity(0.5)), style: FillStyle(eoFill: true))
+        // Rule-of-thirds grid inside the kept rect.
+        var grid = Path()
+        for i in 1...2 {
+            let x = r.minX + r.width * CGFloat(i) / 3
+            grid.move(to: CGPoint(x: x, y: r.minY)); grid.addLine(to: CGPoint(x: x, y: r.maxY))
+            let y = r.minY + r.height * CGFloat(i) / 3
+            grid.move(to: CGPoint(x: r.minX, y: y)); grid.addLine(to: CGPoint(x: r.maxX, y: y))
         }
+        ctx.stroke(grid, with: .color(.white.opacity(0.3)), lineWidth: 0.5 / s)
+        ctx.stroke(Path(r), with: .color(.white.opacity(0.9)), lineWidth: 1 / s)
+        drawCropHandles(r, scale: s, in: ctx)
+    }
+
+    /// Corner L-handles + edge mid-bars, in solid white. Sizes are in on-screen
+    /// points via `1/scale`, so handles look the same regardless of canvas zoom.
+    private func drawCropHandles(_ r: CGRect, scale s: CGFloat, in ctx: GraphicsContext) {
+        let len: CGFloat = 16 / s      // corner arm length
+        let bar: CGFloat = 22 / s      // edge handle length
+        let th: CGFloat  = 3 / s       // thickness
+        let o = th / 2                 // center the handle on the border line
+        let white = GraphicsContext.Shading.color(.white)
+        func fill(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
+            ctx.fill(Path(CGRect(x: x, y: y, width: w, height: h)), with: white)
+        }
+        // Corners (two arms each).
+        fill(r.minX - o, r.minY - o, len, th); fill(r.minX - o, r.minY - o, th, len)            // TL
+        fill(r.maxX + o - len, r.minY - o, len, th); fill(r.maxX - o, r.minY - o, th, len)      // TR
+        fill(r.minX - o, r.maxY - o, len, th); fill(r.minX - o, r.maxY + o - len, th, len)      // BL
+        fill(r.maxX + o - len, r.maxY - o, len, th); fill(r.maxX - o, r.maxY + o - len, th, len) // BR
+        // Edge midpoints.
+        fill(r.midX - bar / 2, r.minY - o, bar, th)   // top
+        fill(r.midX - bar / 2, r.maxY - o, bar, th)   // bottom
+        fill(r.minX - o, r.midY - bar / 2, th, bar)   // left
+        fill(r.maxX - o, r.midY - bar / 2, th, bar)   // right
+    }
+
+    /// Which handle the point is on, in display-space. Tolerance is in on-screen
+    /// points (÷ canvasScale) so handles stay easy to grab at any canvas zoom.
+    private func cropHandle(at p: CGPoint, in r: CGRect) -> CropHandle? {
+        let tol = 18 / max(canvasScale, 0.05)
+        let nearL = abs(p.x - r.minX) <= tol, nearR = abs(p.x - r.maxX) <= tol
+        let nearT = abs(p.y - r.minY) <= tol, nearB = abs(p.y - r.maxY) <= tol
+        let spanX = p.x >= r.minX - tol && p.x <= r.maxX + tol
+        let spanY = p.y >= r.minY - tol && p.y <= r.maxY + tol
+        if nearL && nearT { return .topLeft }
+        if nearR && nearT { return .topRight }
+        if nearL && nearB { return .bottomLeft }
+        if nearR && nearB { return .bottomRight }
+        if nearT && spanX { return .top }
+        if nearB && spanX { return .bottom }
+        if nearL && spanY { return .left }
+        if nearR && spanY { return .right }
+        if r.contains(p) { return .move }
+        return nil
+    }
+
+    /// Show a resize/move cursor while hovering a crop handle (or the box interior),
+    /// so it reads like a normal crop UI. Reverts to the arrow off the box.
+    private func updateCropCursor(at p: CGPoint) {
+        guard let r = cropRect, let h = cropHandle(at: p, in: r) else { NSCursor.arrow.set(); return }
+        switch h {
+        case .left, .right:          NSCursor.resizeLeftRight.set()
+        case .top, .bottom:          NSCursor.resizeUpDown.set()
+        case .topLeft, .bottomRight: NSCursor.resizeNWSE.set()
+        case .topRight, .bottomLeft: NSCursor.resizeNESW.set()
+        case .move:                  NSCursor.openHand.set()
+        }
+    }
+
+    /// New crop rect from a handle drag: corners/edges move the matching sides,
+    /// `.move` slides the whole box. Clamped to the canvas with a minimum size.
+    private func applyCropDrag(_ h: CropHandle, startRect r: CGRect, dx: CGFloat, dy: CGFloat) -> CGRect {
+        let bounds = CGRect(origin: .zero, size: model.displaySize)
+        let minSize: CGFloat = 24
+        if h == .move {
+            var nr = r.offsetBy(dx: dx, dy: dy)
+            nr.origin.x = min(max(0, nr.origin.x), bounds.width - nr.width)
+            nr.origin.y = min(max(0, nr.origin.y), bounds.height - nr.height)
+            return nr
+        }
+        var minX = r.minX, minY = r.minY, maxX = r.maxX, maxY = r.maxY
+        switch h {
+        case .topLeft:     minX += dx; minY += dy
+        case .topRight:    maxX += dx; minY += dy
+        case .bottomLeft:  minX += dx; maxY += dy
+        case .bottomRight: maxX += dx; maxY += dy
+        case .top:         minY += dy
+        case .bottom:      maxY += dy
+        case .left:        minX += dx
+        case .right:       maxX += dx
+        case .move:        break
+        }
+        // Clamp to the canvas.
+        minX = max(0, minX); minY = max(0, minY)
+        maxX = min(bounds.width, maxX); maxY = min(bounds.height, maxY)
+        // Keep a minimum size: push the dragged edge back, opposite edge stays put.
+        let movesLeft = (h == .topLeft || h == .bottomLeft || h == .left)
+        let movesTop  = (h == .topLeft || h == .topRight || h == .top)
+        if maxX - minX < minSize { if movesLeft { minX = maxX - minSize } else { maxX = minX + minSize } }
+        if maxY - minY < minSize { if movesTop  { minY = maxY - minSize } else { maxY = minY + minSize } }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
     private func blurPath(_ kind: BlurRegion.Kind) -> Path {
@@ -530,20 +641,15 @@ struct EditorView: View {
         }
     }
 
-    /// Save commits the edit. While typing on the canvas we drop its Return
-    /// shortcut so Enter finishes the text instead of saving the whole edit.
-    @ViewBuilder
+    /// Save commits the edit. No Return shortcut on purpose: the editor opens with
+    /// no focused button (see EditorWindowController), so Enter can't accidentally
+    /// close it — and in the crop tool Enter is reserved for applying the crop.
     private var saveButton: some View {
-        let button = Button(L("editor.save")) {
+        Button(L("editor.save")) {
             if model.save() {
                 NotificationCenter.default.post(name: .pickleScreenshotsChanged, object: nil)
             }
             onClose()
-        }
-        if model.isEditingText {
-            button
-        } else {
-            button.keyboardShortcut(.defaultAction)
         }
     }
 
@@ -566,7 +672,7 @@ struct EditorView: View {
                     case .pen: penControls
                     case .blur: blurControls
                     case .watermark: watermarkControls
-                    case .crop: cropControls
+                    case .crop: EmptyView()   // crop has no popover (on-canvas button)
                     }
                 }
             }
@@ -621,6 +727,10 @@ struct EditorView: View {
             hidePopoverNow()
         } else {
             model.tool = tool
+            // Entering crop: start with a full-image box the user shrinks via handles.
+            if tool == .crop && cropRect == nil {
+                cropRect = CGRect(origin: .zero, size: model.displaySize)
+            }
             showPopover()
         }
     }
@@ -658,24 +768,10 @@ struct EditorView: View {
         let px = model.imagePixelSize
         let ext = model.fileURL.pathExtension.uppercased()
         let bytes = model.originalByteCount
-        // Live zoom: how big the on-screen preview is vs the image's real pixels,
-        // in actual device pixels (so 100% = 1 image pixel drawn on 1 screen pixel).
-        // displaySize = the editor's fixed authoring size; canvasScale = the
-        // GeometryReader fit-scale; displayScale = Retina factor (×2). Their product
-        // over pixel width = on-screen %. (Earlier this dropped displayScale, so the
-        // value came out ~half on Retina — the "weird number" the badge showed.)
-        let onScreenPx = model.displaySize.width * canvasScale * displayScale
-        let zoom = Int((onScreenPx / max(px.width, 1) * 100).rounded())
         return VStack(alignment: .trailing, spacing: 1) {
-            HStack(spacing: 6) {
-                Text("\(Int(px.width)) × \(Int(px.height)) px")
-                    .font(.system(size: 11, weight: .semibold))
-                    .monospacedDigit()
-                Text("\(zoom)%")
-                    .font(.system(size: 11, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(AppColors.accent)
-            }
+            Text("\(Int(px.width)) × \(Int(px.height)) px")
+                .font(.system(size: 11, weight: .semibold))
+                .monospacedDigit()
             Text("\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) · \(ext)")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
@@ -709,6 +805,8 @@ struct EditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onPreferenceChange(CanvasScaleKey.self) { canvasScale = $0 }
+        // The crop tool's only control: a Crop button floating at the canvas center.
+        .overlay(alignment: .center) { cropApplyOverlay }
     }
 
     /// One labelled slider row, used across the vertical popover controls.
@@ -876,43 +974,41 @@ struct EditorView: View {
         .frame(width: 176)
     }
 
-    // MARK: Crop controls — drag a region on the canvas, then apply.
+    // MARK: Crop — on-canvas "Crop" button (no popover)
 
-    /// True once the dragged crop rect is big enough to be a real selection.
-    private var hasCropSelection: Bool {
-        guard let r = cropRect else { return false }
-        return r.width > 8 && r.height > 8
+    /// True when the crop box differs from the full image (so cropping would
+    /// actually do something). Drives the floating Crop button + its Return key.
+    private var cropIsModified: Bool {
+        guard model.tool == .crop, let r = cropRect else { return false }
+        let full = CGRect(origin: .zero, size: model.displaySize)
+        return r.minX > 0.5 || r.minY > 0.5
+            || r.width < full.width - 0.5 || r.height < full.height - 0.5
     }
 
-    private var cropControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L("editor.crop.hint"))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// Floating "Crop" button over the canvas center, shown once the box is changed
+    /// from the full image. Return also applies it (it owns the .return shortcut).
+    @ViewBuilder
+    private var cropApplyOverlay: some View {
+        if cropIsModified {
             Button { applyCropSelection() } label: {
                 Label(L("editor.crop.apply"), systemImage: "crop")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(maxWidth: .infinity)
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
             }
             .buttonStyle(.borderedProminent)
             .tint(AppColors.accent)
-            .disabled(!hasCropSelection)
-            if hasCropSelection {
-                Button(L("editor.crop.reset")) { cropRect = nil }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 11))
-            }
+            .keyboardShortcut(.return, modifiers: [])
+            .shadow(color: .black.opacity(0.45), radius: 12, y: 4)
         }
-        .frame(width: 176)
     }
 
-    /// Apply the current crop selection to the image, then clear the rect.
+    /// Apply the current crop to the image, then re-arm a full-image box on the
+    /// freshly cropped image (which hides the Crop button until it changes again).
     private func applyCropSelection() {
         guard let r = cropRect else { return }
         model.applyCrop(r)
-        cropRect = nil
+        cropRect = CGRect(origin: .zero, size: model.displaySize)
     }
 
     private func pickLogoFromFile() {
@@ -930,6 +1026,26 @@ private extension View {
     /// Remove SwiftUI's blue keyboard-focus ring (macOS 14+; no-op on 13).
     @ViewBuilder func noFocusRing() -> some View {
         if #available(macOS 14.0, *) { focusEffectDisabled() } else { self }
+    }
+}
+
+private extension NSCursor {
+    /// Diagonal resize cursors for the crop box corners. AppKit has no *public*
+    /// diagonal cursor, but the window-resize ones exist as internal selectors;
+    /// we look them up defensively and fall back to the public crosshair if the
+    /// selector ever goes away (so it can never crash).
+    static var resizeNWSE: NSCursor { internalCursor("_windowResizeNorthWestSouthEastCursor") }
+    static var resizeNESW: NSCursor { internalCursor("_windowResizeNorthEastSouthWestCursor") }
+
+    private static func internalCursor(_ name: String) -> NSCursor {
+        let sel = NSSelectorFromString(name)
+        // These are class methods on NSCursor; dispatch through AnyObject so the
+        // metatype message compiles, and fall back to crosshair if it's ever gone.
+        let cls = NSCursor.self as AnyObject
+        if cls.responds(to: sel), let result = cls.perform(sel) {
+            return (result.takeUnretainedValue() as? NSCursor) ?? .crosshair
+        }
+        return .crosshair
     }
 }
 

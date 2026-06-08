@@ -72,37 +72,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyDown(for: .captureClipboard) { [weak self] in
             self?.presentCaptureMenu(.clipboard)
         }
+        // Open the bottle history panel without capturing anything.
+        KeyboardShortcuts.onKeyDown(for: .openHistory) { [weak self] in
+            self?.openPanel()
+        }
     }
 
-    /// Start the ⇧⌘5-style selection overlay with `mode` pre-highlighted. The
-    /// crosshair is live immediately; the floating bar lets the user switch mode
-    /// before dragging. On commit we capture the chosen rect for the chosen mode.
+    /// Start the ⇧⌘5-style selection overlay with `mode` pre-highlighted. We first
+    /// **freeze every screen** (snapshot the instant the shortcut fired) so the user
+    /// selects on a still image and we capture exactly what was on screen at press
+    /// time — the floating bar / overlay appearing can't change what gets captured.
     private func presentCaptureMenu(_ mode: CaptureMode) {
+        if #available(macOS 14.0, *) {
+            Task { @MainActor in
+                let frozen = await CaptureService.shared.freezeScreens()
+                self.beginRegionSelect(mode, frozen: frozen)
+            }
+        } else {
+            beginRegionSelect(mode, frozen: [:])   // macOS 13: live overlay (no freeze)
+        }
+    }
+
+    private func beginRegionSelect(_ mode: CaptureMode, frozen: [CGDirectDisplayID: CGImage]) {
         regionSelect.begin(
             preselect: mode,
             anchorRect: statusItemFrame,
-            onComplete: { [weak self] chosen, cocoaRect in self?.runRegionCapture(chosen, cocoaRect) },
+            frozen: frozen,
+            onComplete: { [weak self] chosen, image, cocoaRect in
+                self?.runRegionCapture(chosen, image: image, cocoaRect: cocoaRect)
+            },
             onCancel: {})
     }
 
-    /// Capture the selected rectangle for the chosen mode. Save/editor land in
-    /// `PICkle bottle`; clipboard writes nothing to the bottle.
-    private func runRegionCapture(_ mode: CaptureMode, _ cocoaRect: CGRect) {
+    /// Finish a capture for the chosen mode. With a freeze we already hold the
+    /// cropped `image`; without one (macOS 13) we live-capture `cocoaRect`. Save/
+    /// editor land in `PICkle bottle`; clipboard writes nothing to the bottle.
+    private func runRegionCapture(_ mode: CaptureMode, image: CGImage?, cocoaRect: CGRect) {
         switch mode {
         case .clipboard:
-            CaptureService.shared.captureRegionToClipboard(cocoaRect: cocoaRect) { _ in }
+            if let image {
+                CaptureService.shared.copyImageToClipboard(image, pointSize: cocoaRect.size) { _ in }
+            } else {
+                CaptureService.shared.captureRegionToClipboard(cocoaRect: cocoaRect) { _ in }
+            }
         case .save:
-            CaptureService.shared.captureRegionToFile(cocoaRect: cocoaRect) { [weak self] url in
+            let done: (URL?) -> Void = { [weak self] url in
                 guard let self, let url else { return }
                 NotificationCenter.default.post(name: .pickleScreenshotsChanged, object: nil)
                 self.flourishAfterSave(url: url, startRect: cocoaRect)
             }
+            if let image { CaptureService.shared.saveImageToFile(image, completion: done) }
+            else { CaptureService.shared.captureRegionToFile(cocoaRect: cocoaRect, completion: done) }
         case .editor:
-            CaptureService.shared.captureRegionToFile(cocoaRect: cocoaRect) { [weak self] url in
+            let done: (URL?) -> Void = { [weak self] url in
                 guard let self, let url else { return }
                 NotificationCenter.default.post(name: .pickleScreenshotsChanged, object: nil)
                 self.editorController.open(url: url)
             }
+            if let image { CaptureService.shared.saveImageToFile(image, completion: done) }
+            else { CaptureService.shared.captureRegionToFile(cocoaRect: cocoaRect, completion: done) }
         }
     }
 

@@ -21,6 +21,66 @@ final class CaptureService {
         }
     }
 
+    // MARK: - Freeze (snapshot every screen the instant the shortcut fires)
+
+    /// Snapshot every screen NOW at full resolution, keyed by display ID. The
+    /// selection overlay uses these as a frozen backdrop, so the user picks a
+    /// region on the *still* image from the moment the shortcut was pressed —
+    /// not a live screen that keeps changing while they drag. The crop is taken
+    /// from this image too (no second, later capture).
+    @available(macOS 14.0, *)
+    func freezeScreens() async -> [CGDirectDisplayID: CGImage] {
+        var out: [CGDirectDisplayID: CGImage] = [:]
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            for screen in NSScreen.screens {
+                guard let sid = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value,
+                      let display = content.displays.first(where: { $0.displayID == sid }) else { continue }
+                let filter = SCContentFilter(display: display, excludingWindows: [])
+                let config = SCStreamConfiguration()
+                let scale = screen.backingScaleFactor
+                config.width = Int((screen.frame.width * scale).rounded())
+                config.height = Int((screen.frame.height * scale).rounded())
+                config.showsCursor = false
+                config.ignoreShadowsDisplay = true
+                config.captureResolution = .best
+                if let img = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) {
+                    out[sid] = img
+                }
+            }
+        } catch {
+            NSLog("PICkle freeze error: \(error)")
+        }
+        return out
+    }
+
+    /// Save an already-captured CGImage (e.g. a crop from the frozen screen) to the
+    /// bottle folder. PNG encode + write happen off the main thread.
+    func saveImageToFile(_ cg: CGImage, completion: @escaping (URL?) -> Void) {
+        let url = uniqueURL()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let rep = NSBitmapImageRep(cgImage: cg)
+            var saved = false
+            if let png = rep.representation(using: .png, properties: [:]) {
+                do { try png.write(to: url); saved = true }
+                catch { NSLog("PICkle capture write failed: \(error)") }
+            }
+            DispatchQueue.main.async { completion(saved ? url : nil) }
+        }
+    }
+
+    /// Copy an already-captured CGImage straight to the clipboard (NOT saved).
+    /// `pointSize` is the logical selection size so a Retina crop pastes 1× sized.
+    func copyImageToClipboard(_ cg: CGImage, pointSize: CGSize, completion: @escaping (Bool) -> Void) {
+        let rep = NSBitmapImageRep(cgImage: cg)
+        rep.size = NSSize(width: pointSize.width, height: pointSize.height)
+        let image = NSImage(size: rep.size)
+        image.addRepresentation(rep)
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        completion(pb.writeObjects([image]))
+    }
+
     // MARK: - Region capture (custom selection overlay → ScreenCaptureKit)
 
     /// Capture a fixed rectangle (no interaction) into the bottle folder.

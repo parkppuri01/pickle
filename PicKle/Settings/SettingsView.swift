@@ -37,6 +37,7 @@ private struct ShortcutsSettingsTab: View {
                 KeyboardShortcuts.Recorder(L("settings.shortcuts.normal"), name: .captureNormal)
                 KeyboardShortcuts.Recorder(L("settings.shortcuts.feature"), name: .captureFeature)
                 KeyboardShortcuts.Recorder(L("settings.shortcuts.clipboard"), name: .captureClipboard)
+                KeyboardShortcuts.Recorder(L("settings.shortcuts.openHistory"), name: .openHistory)
             }
             Section {
                 Text(L("settings.shortcuts.note"))
@@ -275,7 +276,7 @@ private struct AboutTab: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image("MenuBarIcon").resizable().frame(width: 48, height: 48)
+            Image("AppMainIcon").resizable().scaledToFit().frame(width: 72, height: 72)
             Text("PICkle").font(.system(size: 18, weight: .bold))
             Text(L("settings.about.tagline")).font(.system(size: 12)).foregroundStyle(.secondary)
             Text(appVersion).font(.system(size: 11)).foregroundStyle(.tertiary)

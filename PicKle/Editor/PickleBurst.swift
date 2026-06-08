@@ -1,14 +1,12 @@
 import SwiftUI
 
-/// Easter-egg overlay: confetti-style 🥒 particles launched up from the bottom
-/// of the editor canvas, peaking near mid-height, then falling back through the
-/// floor under gravity. Triggered by mutating `trigger` (any new UUID = new
-/// burst). Ported from pizzaClip's `PizzaBurst`, themed to the pickle 🥒.
+/// Easter-egg overlay: confetti-style "폭탄피클" image particles launched up from
+/// the bottom of the editor canvas, peaking near mid-height, then falling back
+/// through the floor under gravity. Triggered by mutating `trigger` (any new UUID
+/// = new burst). Ported from pizzaClip's `PizzaBurst`, themed to the pickle 🥒.
 ///
-/// Renders each particle as a real `Text` view positioned with `.position()`
-/// and rotated with `.rotationEffect`. Canvas + `gc.draw(text:)` was tried
-/// first but emojis sometimes fail to rasterise inside a Canvas draw layer
-/// on macOS 13 — plain SwiftUI views avoid that entire failure mode.
+/// Renders each particle as an `Image("PickleBomb")` positioned with `.position()`
+/// and rotated with `.rotationEffect` — about twice the size of the old emoji.
 struct PickleBurst: View {
     let trigger: UUID?
 
@@ -26,8 +24,7 @@ struct PickleBurst: View {
         let angle0: CGFloat       // initial rotation (rad)
         let omega: CGFloat        // angular velocity (rad/s)
         let delay: TimeInterval   // stagger so particles don't all launch on frame 0
-        let size: CGFloat         // emoji font size
-        let emoji: String
+        let size: CGFloat         // image side length (pt)
     }
 
     var body: some View {
@@ -74,8 +71,10 @@ struct PickleBurst: View {
                 return 1
             }()
 
-            Text(p.emoji)
-                .font(.system(size: p.size))
+            Image("PickleBomb")
+                .resizable()
+                .interpolation(.medium)
+                .frame(width: p.size, height: p.size)
                 .rotationEffect(.radians(Double(angle)))
                 .position(x: x, y: y)
                 .opacity(opacity)
@@ -83,16 +82,20 @@ struct PickleBurst: View {
     }
 
     private static func makeParticles() -> [Particle] {
-        (0..<48).map { _ in
-            Particle(
+        (0..<48).map { i in
+            // A few "high flyers" (every 6th ≈ 8 of them) launch harder so they
+            // peak a bit higher than the rest, for a livelier burst.
+            let highFlyer = i % 6 == 0
+            let vy = highFlyer ? CGFloat.random(in: 640...780)
+                               : CGFloat.random(in: 360...560)
+            return Particle(
                 x0Norm: CGFloat.random(in: 0.08...0.92),
-                vySpeed: CGFloat.random(in: 360...560),
+                vySpeed: vy,
                 vx: CGFloat.random(in: -70...70),
                 angle0: CGFloat.random(in: 0...(2 * .pi)),
                 omega: CGFloat.random(in: -4...4),
                 delay: TimeInterval.random(in: 0...0.32),
-                size: CGFloat.random(in: 16...30),
-                emoji: "🥒"
+                size: CGFloat.random(in: 32...60)
             )
         }
     }

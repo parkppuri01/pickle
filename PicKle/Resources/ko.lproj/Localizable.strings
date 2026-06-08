@@ -72,9 +72,9 @@
 "editor.blur.intensity.help" = "블러 강도";
 
 /* Crop controls */
-"editor.crop.hint" = "남길 영역을 드래그한 뒤 ‘자르기’를 누르세요.";
+"editor.crop.hint" = "모서리·변 핸들을 끌어 자를 영역을 맞춘 뒤 ‘자르기’를 누르세요. (안쪽을 끌면 이동)";
 "editor.crop.apply" = "자르기";
-"editor.crop.reset" = "선택 취소";
+"editor.crop.reset" = "전체로 되돌리기";
 
 /* ===== Settings — tabs ===== */
 "settings.tab.general" = "일반";
@@ -87,6 +87,7 @@
 "settings.shortcuts.normal" = "일반 캡처 (바로 저장)";
 "settings.shortcuts.feature" = "기능 캡처 (편집창 열기)";
 "settings.shortcuts.clipboard" = "클립보드 복사 (저장 안 함)";
+"settings.shortcuts.openHistory" = "보관함 열기 (캡처 없이)";
 "settings.shortcuts.note" = "단축키를 클릭하고 새 조합을 누르면 바뀝니다. ‘클립보드 복사’는 PICkle bottle 폴더에 저장하지 않고 클립보드로만 복사합니다 (PizzaClip이 켜져 있으면 그쪽으로 들어갑니다).";
 
 /* Settings — watermark */

@@ -45,6 +45,10 @@ final class EditorWindowController {
         self.window = win
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
+        // Don't let any button grab the initial keyboard focus — otherwise Return
+        // would immediately fire the focused button and close the editor. Clear the
+        // first responder once SwiftUI has installed its hosting view.
+        DispatchQueue.main.async { [weak win] in win?.makeFirstResponder(nil) }
     }
 
     func close() {

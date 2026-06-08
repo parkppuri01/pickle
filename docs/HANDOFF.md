@@ -1,8 +1,8 @@
 # PICkle — HANDOFF (단일 진실 문서)
 
-> **마지막 업데이트**: 2026-06-08 세션 · **0.5.0 버전 확정(MARKETING_VERSION=0.5.0, build 5)** · **현재 상태**: 편집기 UX 대수술에 더해 **편집기 크롭(자르기) 도구 추가**·**배율(%) 표시 Retina 보정**·**설정 탭 재구성(일반/단축키/워터마크/저장공간)** 반영. 컴파일 빌드 성공 + 서명·공증 DMG(`~/Downloads/PICkle-0.5.0.dmg`) 생성 완료. (편집기 신규 기능 실기검증은 사용자 측 DMG 설치 후 권장)
+> **마지막 업데이트**: 2026-06-09 세션 · **0.5.0(MARKETING_VERSION=0.5.0, build 5)** · **현재 상태**: 0.5.0 릴리스 이후 피드백 반영 — **캡처 freeze(단축키 누른 순간 화면 고정)**·**크롭 핸들 조절 UX(엔터 적용·캔버스 가운데 버튼·리사이즈 커서)**·**줌% 표시 제거**·**편집창 초기 포커스 해제**·**캡처 선택영역 픽셀 치수**·**보관함 단축키 ⌥⇧F**·**앱아이콘(pk)·이스터에그(폭탄피클 이미지)**. 빌드 성공 + `/Applications` 설치. 이번 커밋에서 서명·공증 DMG 재생성.
 > **새 세션은 이 문서를 먼저 읽으면 컨텍스트가 잡힙니다.**
-> **▶ 다음 세션 할 일: 사용자가 새로 요청할 수정부터. 직전 세션(크롭·줌%·설정탭·0.5.0 릴리스)은 모두 완료·빌드성공·DMG생성 — 아래 [✅ 2026-06-08 세션 (후속)] 참고. 알려진 후속(보류): ①편집 입력칸이 캔버스 `scaleEffect` 안에 있어 한글 IME 후보창 위치가 살짝 어긋날 수 있음 → 안정화 확인됐으면 "입력칸만 scaleEffect 밖으로 분리"로 다듬기 ②Sparkle 호스팅(1.0). (※단축키 설명 문구는 "캡처 메뉴라도 드래그하면 바로 저장"이라 현행 표기가 맞음 — 갱신 불필요로 확정됨.)**
+> **▶ 다음 세션 할 일: 사용자가 새로 요청할 수정부터. 직전 2026-06-09 세션은 모두 완료·빌드성공 — 아래 [✅ 2026-06-09 세션] 참고. 알려진 후속(보류): ①편집 입력칸이 캔버스 `scaleEffect` 안에 있어 한글 IME 후보창 위치가 살짝 어긋날 수 있음(입력칸만 scaleEffect 밖으로 분리 권고) ②Sparkle 호스팅(1.0).**
 > 느낌/DNA 가이드는 형 앱에서 물려받은 [`../pickle-느낌브리프.md`](../pickle-느낌브리프.md) 참고.
 >
 > ⚠️ **개인정보 주의**: 서명에 쓰는 팀 ID·Developer ID 식별자는 **gitignore된 `Signing.xcconfig`** 에만 둡니다 (커밋 금지). 배포 자격증명은 `scripts/release.local.sh`(gitignore)에. 각각 `*.example` 템플릿을 복사해 채우세요.
@@ -21,16 +21,16 @@
   - **아이콘 상태표시**: 캡처 내역 있으면 피클병, 비면 빈병 (메뉴바 + 폴더 아이콘 둘 다).
 - 단축키 3종 (Settings에서 변경 가능) → 누르면 **자체 영역선택 오버레이(⇧⌘5식)** + 모드바가 뜨고, 모드 프리셀렉트됨:
   - `⇧⌥S` 저장(바로 bottle) / `⇧⌥D` 편집(편집창) / `⇧⌥A` 클립보드(**bottle에 저장 안 함**, PizzaClip 켜져 있으면 그쪽으로)
-  - 드래그로 영역 선택 → 캡처(ScreenCaptureKit, 멀티모니터 OK). **드래그 중 스페이스바 누른 채 이동 = 선택영역 통째 이동**(⇧⌘5식, 떼면 다시 크기조절). ←/→ 모드변경, Esc/✕ 취소.
+  - **단축키 누른 순간 전 화면을 freeze**(스냅샷) → 정지본 위에서 드래그로 영역 선택 → 그 정지본에서 잘라냄(ScreenCaptureKit, 멀티모니터 OK). **드래그 중 스페이스바 = 선택영역 통째 이동**(떼면 다시 크기조절). 드래그 중 커서 옆 **픽셀 치수(W×H)** 표시. ←/→ 모드변경, Esc/✕ 취소.
 - 저장 위치: `~/Documents/PICkle bottle` (Settings에서 변경 가능, 변경 시 경고).
 - **편집기 3도구** (왼쪽 아이콘 레일 + **선택 시 옆에 떠있는 옵션 팝오버**, 마우스 떠나면 ~2초 후 자동 페이드 / 선택 툴 재클릭=토글):
   - 펜(색7/굵기3) · 블러(가우시안+모자이크 / 브러시+영역, 강도 슬라이더) · 워터마크(텍스트 **AND** 로고 동시, 각각 독립 드래그·크기·투명도)
   - **워터마크 텍스트는 캔버스에서 직접 입력**(NSTextView): Enter=줄바꿈 / 바깥클릭·Esc=확정 / 더블클릭=재편집. **문단정렬(좌/중/우)·자간·줄간격** 조절. 드래그 시 **변(edge) 기준 스냅 가이드**(좌=왼쪽변·우=오른쪽변·상/하=위/아래변·가운데=중심).
-  - **배율(%)**: 우측 상단 px 옆에 현재 표시 배율 실시간 표시.
-  - **⌘Z** 통합 되돌리기(펜/블러를 그린 순서대로). 저장=원본 해상도 합성 후 덮어쓰기.
+  - **크롭(자르기)**: 진입 시 전체 박스 → 4모서리·4변 핸들로 조절(안쪽=이동, 리사이즈 커서), 영역 바뀌면 캔버스 가운데 "자르기" 버튼/**Enter**로 적용. 우측 상단엔 px·용량·확장자 표시(줌% 없음).
+  - **⌘Z** 통합 되돌리기(펜/블러/크롭을 한 순서대로). 저장=원본 해상도 합성 후 덮어쓰기.
 - **자동삭제**: 기본 30일(끄기/7/14/30/60/90일). 지난 파일은 휴지통으로(복구 가능). 앱 실행 시 + 하루 1회.
-- **다국어(한국어/영어 런타임 전환)**: Settings → 정보 탭에서 `시스템 / 한국어 / English` 선택. 앱 재시작 없이 전환(설정창은 즉시, 다른 창은 다음 열 때). 기본=시스템 언어.
-- **Settings**(TabView 4탭): 단축키 / 워터마크(폰트·로고 프리셋·마지막 텍스트 기억) / 보관(자동삭제·저장위치+경고) / 정보(+언어 선택).
+- **다국어(한국어/영어 런타임 전환)**: Settings → 일반 탭에서 `시스템 / 한국어 / English` 선택. 앱 재시작 없이 전환(설정창은 즉시, 다른 창은 다음 열 때). 기본=시스템 언어.
+- **Settings**(TabView 4탭): **일반**(앱정보+언어) / **단축키**(캡처 S/D/A + 보관함 열기 ⌥⇧F) / **워터마크**(폰트·로고 프리셋·마지막 텍스트 기억) / **저장공간**(자동삭제·저장위치+경고). 아이콘: 일반=gearshape·단축키=keyboard·워터마크=signature·저장공간=internaldrive.
 - 히스토리 그리드: 1:1 썸네일, 더블클릭=편집, 단일클릭=선택, 🍕=클립보드 복사, 🗑=휴지통, 드래그아웃, Clear all(확인창).
 - **배포**: 서명+공증+staple DMG (`bash scripts/release-test-dmg.sh` → `~/Downloads/PICkle-<버전>.dmg`).
 
@@ -46,7 +46,7 @@
 - [ ] **편집 입력칸 `scaleEffect` 분리 (후속, 보류)** — 워터마크 입력칸(NSTextView)이 캔버스 축소 변환 안에 있어 **한글 IME 후보창 위치가 구조적으로 어긋남**(architect 자문). *편집칸만 scaleEffect 밖으로 빼서 좌표변환 배치* 권고(`textWM.center*s`로 화면좌표, 폰트는 이미 스케일된 크기). (2026-06-08 세션 참고)
 - [ ] **편집기 디자인 세부 조정** — 툴바 팝오버(시안 B)·캔버스 직접입력·정렬/자간/줄간격·**크롭(자르기) 완료**. 예시(`guide/편집팝업예시.png`)의 남은 추가 도구(화살표·도형·스티커 등)는 추후.
 - 미해결 리스크: folder-as-truth라 bottle 폴더를 공용폴더로 바꾸면 남의 이미지도 그리드/ClearAll 대상 → Settings에 경고 표시는 해둠.
-- 자체 오버레이 한계(추후 보강 여지): macOS 기본 ⇧⌘5에 있는 *창(window) 모드·돋보기 루페·선택영역 치수 표시*는 없음. 드래그 직사각형 선택만 지원. 멀티모니터는 전 화면 union 오버레이 1개로 처리(좌표 변환은 주 화면 기준 flip) — 모니터 배치가 특이하면 캡처 좌표 검증 필요.
+- 자체 오버레이 한계(추후 보강 여지): macOS 기본 ⇧⌘5의 *창(window) 모드·돋보기 루페*는 없음(선택영역 **픽셀 치수 표시는 추가됨**, 드래그 직사각형 선택만 지원). 멀티모니터는 **화면별 오버레이**로 처리(2026-06-07 세션) — 배치가 특이하면 캡처 좌표 검증 권장.
 
 ### ✅ 최근 완료 (0.5.0 작업분)
 - **🥒 이스터에그 burst**: 편집기 워터마크 텍스트가 *정확히* `pickle`/`피클`일 때 캔버스에 🥒가 솟구침(형 PizzaBurst 이식 → `Editor/PickleBurst.swift`). `EditorModel.pickleBurstID`+`maybeTriggerBurst` / `EditorView`의 `onChange(textWM.text)`로 발동.
@@ -59,6 +59,42 @@
 - **폴더아이콘 교체**: `guide/폴더아이콘.png`(피클병)·`guide/폴더아이콘_빈병.png`(빈병)을 1024 정사각으로 패딩해 `FolderIconFull/Empty.imageset` 교체.
 - **빈 보관함 일러스트 교체**: `guide/빈폴더 안내.png`(8000²)를 512²로 최적화(1MB→70KB)해 `HistoryEmptyArt.imageset`. `HistoryView` emptyState에서 `Text("🥒")` → `Image("HistoryEmptyArt")`. (그림 속 문구 "THE FOLDER IS EMPTY"는 영어 고정, 아래 안내문은 다국어)
 - **Sparkle 자동 업데이트(앱 측)**: 형 pizzaClip 패턴 이식. Sparkle 2.6.0 패키지 + Info.plist SU* 키(`SUFeedURL=https://pizza-clip.com/pickle/appcast.xml`, `SUPublicEDKey`=pizzaClip 키 재사용) + AppDelegate `SPUStandardUpdaterController` + "업데이트 확인…" 메뉴. 릴리스 스크립트에 Sparkle 헬퍼(XPC/Updater.app/Autoupdate) Developer ID 재서명 단계 추가(공증 통과 필수). appcast 생성: `scripts/sparkle-appcast.sh`. **호스팅 배포는 미완**(위 "다음" 참고).
+
+---
+
+## ✅ 2026-06-09 세션 — 캡처 freeze · 크롭 핸들 UX · 줌% 제거 · 아이콘/이스터에그 · 보관함 단축키
+
+> 0.5.0 릴리스(커밋 8abb3e0) 이후 사용자 피드백 반영. 전부 빌드 성공 + `/Applications` 설치 검증. 이번 커밋에서 서명·공증 DMG 재생성.
+
+### 캡처 — 단축키 누른 순간 화면 freeze (★캡처 파이프라인 변경)
+- **문제**: 기존엔 투명 오버레이로 *라이브* 화면 위에서 선택 → commit 시 SCK **재캡처**(드래그 끝난 순간이 찍힘). 영상·애니메이션이면 "단축키 누른 순간 화면"을 못 잡음.
+- **변경**: 단축키 누르면 **즉시 전 화면 스냅샷** → 정지본 위에서 선택 → 그 정지본에서 crop(재캡처 없음).
+  - `CaptureService.freezeScreens()` = 화면별 SCK 전체 캡처 → `[CGDirectDisplayID: CGImage]` (+ `saveImageToFile`/`copyImageToClipboard` CGImage 헬퍼).
+  - `SelectionOverlayView.freezeImage`/`freezeScale`: 정지본을 배경으로 그리고(dim 위 선택영역만 선명 재그리기), `croppedImage(for:)`로 view 좌표→픽셀 crop.
+  - `AppDelegate.presentCaptureMenu`가 `Task{ await freezeScreens() }` 후 `beginRegionSelect(frozen:)`. `RegionSelectController.begin(frozen:)`이 화면별로 분배. `onComplete`가 `(CaptureMode, CGImage?, CGRect)`로 변경. `runRegionCapture`는 image 있으면 freeze 저장/복사, 없으면(macOS13) 기존 라이브 재캡처로 fallback.
+  - **macOS 14+ 전용**(SCScreenshotManager). 13은 freeze 없이 기존 동작.
+
+### 편집기 — 크롭을 핸들 조절 방식으로 (드래그 그리기 → 핸들)
+- 크롭 도구 진입 시 **전체 이미지 박스**가 뜨고 4모서리(L자)·4변(막대) 핸들로 조절, 안쪽 끌면 이동(`CropHandle` enum, `cropHandle(at:in:)` 히트테스트, `applyCropDrag`). 핸들/선 크기는 `1/canvasScale`로 화면상 일정.
+- **마우스 커서**: 모서리=대각선(`NSCursor` 내부 `_windowResize…Cursor` 셀렉터를 `AnyObject`로 안전 호출, 없으면 crosshair fallback), 변=↔/↕, 안쪽=손(`updateCropCursor`).
+- **엔터 적용 + 팝오버 제거 + 캔버스 가운데 버튼**: 크롭은 팝오버 안 띄움(`optionsPopover`를 `tool != .crop`일 때만). 영역이 전체에서 바뀌면(`cropIsModified`) 캔버스 정중앙에 "자르기" 버튼(`cropApplyOverlay`, `.keyboardShortcut(.return)`). ⌘Z·즉시적용(flatten→crop)·스냅샷 복원은 그대로.
+
+### 편집기 — 줌(%) 표시 **제거**
+- 직전 세션의 "배율% Retina 보정"을 사용자 요청으로 **삭제**(원하는 값이 아니었음). `imageInfoBadge`는 `px · 용량 · 확장자`만. `@Environment(\.displayScale)` 제거. **`canvasScale`(CanvasScaleKey)는 크롭 핸들 크기 보정용으로 유지**.
+
+### 편집창 — 초기 포커스 해제
+- 편집창 열 때 버튼이 키보드 포커스를 잡아 **Enter로 창이 닫히던** 문제 → `EditorWindowController`에서 `makeFirstResponder(nil)`(async) + 저장 버튼의 `.keyboardShortcut(.defaultAction)` 제거. 이제 Enter는 크롭 적용 전용.
+
+### 캡처 — 선택영역 픽셀 치수 표시
+- 드래그 중 커서 옆에 `W × H`(Retina 배율 반영 실제 픽셀) 배지(`SelectionOverlayView.drawDimensionBadge`). macOS 캡처 HUD식.
+
+### 보관함 단축키 ⌥⇧F
+- 캡처 없이 보관함 패널만 여는 단축키(`Shortcuts.openHistory` 기본 `⌥⇧F` → `AppDelegate.openPanel()` 토글). 설정 단축키 탭에 Recorder 추가(`settings.shortcuts.openHistory`).
+
+### 아이콘 · 이스터에그
+- **앱 아이콘 → `guide/pk.png`**(AppIcon 전 사이즈 sips 재생성). **설정 일반탭 가운데 이미지 → 새 `AppMainIcon.imageset`**(`guide/피클 메인아이콘.png`, 72pt). 메뉴바 아이콘은 유지.
+- **이스터에그 🥒 이모지 → `폭탄피클` 이미지**(`PickleBomb.imageset`, `guide/폭탄 피클@0.5x.png` 64/128px). 크기 이모지의 2배(32~60pt), 일부(약 8마리)는 더 높이 솟구침(`vySpeed` 640~780).
+- ⚠️ 앱 아이콘 교체는 macOS 아이콘 캐시 때문에 Dock/Finder에 바로 안 보일 수 있음 → `lsregister -f` + `touch` + `killall Dock`, 그래도 안 되면 로그아웃/로그인.
 
 ---
 

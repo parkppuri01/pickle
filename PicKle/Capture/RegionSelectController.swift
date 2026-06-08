@@ -19,6 +19,12 @@ final class SelectionOverlayView: NSView {
     var onCommit: ((NSRect) -> Void)?
     var onCancel: (() -> Void)?
 
+    /// Frozen screenshot of this view's screen, captured the instant the shortcut
+    /// fired. When set it's drawn as the backdrop and the crop is taken from it, so
+    /// what gets captured is exactly the screen at shortcut-press time (not later).
+    var freezeImage: CGImage?
+    var freezeScale: CGFloat = 2
+
     private var startPoint: NSPoint?
     private var selection: NSRect = .zero
     /// Hold Space mid-drag to reposition the whole selection (⇧⌘5 behaviour).
@@ -101,20 +107,79 @@ final class SelectionOverlayView: NSView {
     func setMoving(_ moving: Bool) { isMoving = moving }
 
     override func draw(_ dirtyRect: NSRect) {
-        // Dim this screen.
+        // Frozen backdrop: the screen exactly as it was when the shortcut fired, so
+        // the user selects on a still image. With no freeze (e.g. macOS 13) the view
+        // stays transparent over the live screen, matching the old behaviour.
+        if let frozen = freezeImage {
+            NSImage(cgImage: frozen, size: bounds.size).draw(in: bounds)
+        }
+        // Dim everything.
         NSColor.black.withAlphaComponent(0.30).setFill()
         bounds.fill()
         guard selection.width > 0, selection.height > 0,
               let ctx = NSGraphicsContext.current?.cgContext else { return }
-        // Punch the selection clear (no dim there → see the real screen).
-        ctx.setBlendMode(.clear)
-        ctx.fill(selection)
-        ctx.setBlendMode(.normal)
+        // Reveal the selection: redraw the frozen image sharp inside it; with no
+        // freeze, punch the dim out so the live screen shows through there.
+        if let frozen = freezeImage {
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: selection).setClip()
+            NSImage(cgImage: frozen, size: bounds.size).draw(in: bounds)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            ctx.setBlendMode(.clear)
+            ctx.fill(selection)
+            ctx.setBlendMode(.normal)
+        }
         // Pickle-green outline.
         let path = NSBezierPath(rect: selection)
         path.lineWidth = 2
         NSColor(srgbRed: 0.43, green: 0.68, blue: 0.31, alpha: 1).setStroke()
         path.stroke()
+
+        // Live pixel dimensions near the cursor, like the macOS screenshot HUD.
+        // selection is in points; multiply by the screen's backing scale for the
+        // actual captured pixel count (Retina = ×2).
+        if let cursor = lastDragPoint {
+            let scale = freezeImage != nil ? freezeScale : (window?.backingScaleFactor ?? 2)
+            let wpx = Int((selection.width * scale).rounded())
+            let hpx = Int((selection.height * scale).rounded())
+            drawDimensionBadge("\(wpx) × \(hpx)", near: cursor)
+        }
+    }
+
+    /// Crop the frozen screenshot to `rectInView` (this view's coords, bottom-left
+    /// origin), converting to the image's pixel space (top-left origin). Returns nil
+    /// when there's no freeze (the caller then falls back to a live re-capture).
+    func croppedImage(for rectInView: NSRect) -> CGImage? {
+        guard let frozen = freezeImage else { return nil }
+        let s = freezeScale
+        let px = CGRect(x: rectInView.minX * s,
+                        y: (bounds.height - rectInView.maxY) * s,
+                        width: rectInView.width * s,
+                        height: rectInView.height * s).integral
+        let clamped = px.intersection(CGRect(x: 0, y: 0, width: frozen.width, height: frozen.height))
+        guard clamped.width >= 1, clamped.height >= 1 else { return nil }
+        return frozen.cropping(to: clamped)
+    }
+
+    /// A small rounded "W × H" badge near the cursor. Clamped to the view so it
+    /// never spills off the screen edge while dragging.
+    private func drawDimensionBadge(_ text: String, near point: NSPoint) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+        let str = NSAttributedString(string: text, attributes: attrs)
+        let textSize = str.size()
+        let padX: CGFloat = 8, padY: CGFloat = 4
+        let boxW = textSize.width + padX * 2, boxH = textSize.height + padY * 2
+        // Sit just below-right of the cursor (view is bottom-left origin).
+        var x = point.x + 14
+        var y = point.y - boxH - 14
+        x = min(max(x, 4), bounds.width - boxW - 4)
+        y = min(max(y, 4), bounds.height - boxH - 4)
+        let box = NSRect(x: x, y: y, width: boxW, height: boxH)
+        NSColor.black.withAlphaComponent(0.75).setFill()
+        NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5).fill()
+        str.draw(at: NSPoint(x: x + padX, y: y + padY))
     }
 }
 
@@ -129,7 +194,7 @@ final class RegionSelectController {
     private var barModel: CaptureModeBarModel?
     private var keyMonitor: Any?
 
-    private var onComplete: ((CaptureMode, CGRect) -> Void)?
+    private var onComplete: ((CaptureMode, CGImage?, CGRect) -> Void)?
     private var onCancel: (() -> Void)?
 
     var isActive: Bool { !overlays.isEmpty }
@@ -138,7 +203,8 @@ final class RegionSelectController {
     /// just move the highlight (pressing another capture shortcut re-targets).
     func begin(preselect: CaptureMode,
                anchorRect: NSRect?,
-               onComplete: @escaping (CaptureMode, CGRect) -> Void,
+               frozen: [CGDirectDisplayID: CGImage],
+               onComplete: @escaping (CaptureMode, CGImage?, CGRect) -> Void,
                onCancel: @escaping () -> Void) {
         if !overlays.isEmpty, let barModel {
             self.onComplete = onComplete
@@ -169,9 +235,16 @@ final class RegionSelectController {
 
             let view = SelectionOverlayView(frame: NSRect(origin: .zero, size: screen.frame.size))
             let screenOrigin = screen.frame.origin
+            // Hand this screen's frozen snapshot to its overlay (if we have one).
+            if let sid = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value,
+               let img = frozen[sid] {
+                view.freezeImage = img
+                view.freezeScale = screen.backingScaleFactor
+            }
             view.onDragBegan = { [weak self] in self?.hideToolbar() }
-            view.onCommit = { [weak self] rectInView in
-                self?.commit(rectInView: rectInView, screenOrigin: screenOrigin)
+            view.onCommit = { [weak self, weak view] rectInView in
+                let cropped = view?.croppedImage(for: rectInView)
+                self?.commit(rectInView: rectInView, screenOrigin: screenOrigin, image: cropped)
             }
             view.onCancel = { [weak self] in self?.cancel() }
             win.contentView = view
@@ -244,7 +317,7 @@ final class RegionSelectController {
 
     // MARK: - Outcomes
 
-    private func commit(rectInView: NSRect, screenOrigin: NSPoint) {
+    private func commit(rectInView: NSRect, screenOrigin: NSPoint, image: CGImage?) {
         guard !overlays.isEmpty else { return }
         let mode = barModel?.selected ?? .save
         // View coords (origin = this screen's bottom-left) → global Cocoa coords.
@@ -253,8 +326,14 @@ final class RegionSelectController {
                             width: rectInView.width, height: rectInView.height)
         let cb = onComplete
         teardown()
-        // Let the compositor drop the (now-removed) overlay before capturing.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { cb?(mode, global) }
+        if image != nil {
+            // Frozen crop already in hand → deliver right away (no re-capture).
+            cb?(mode, image, global)
+        } else {
+            // No freeze (macOS 13): let the compositor drop the overlay before the
+            // caller live-captures the rect.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { cb?(mode, nil, global) }
+        }
     }
 
     private func cancel() {
