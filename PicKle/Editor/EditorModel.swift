@@ -52,16 +52,19 @@ struct LogoWatermark {
 ///
 /// Pipeline (bottom→top): base image → blur regions → pen strokes → logo → text.
 final class EditorModel: ObservableObject {
-    enum Tool: String, CaseIterable { case pen, blur, watermark }
+    enum Tool: String, CaseIterable { case pen, blur, watermark, crop }
     enum BlurStyle { case gaussian, mosaic }
     enum BlurApply { case brush, area }
-    /// One undoable action, newest last — lets ⌘Z undo pen and blur in the real
-    /// order they were drawn, regardless of which tool is currently selected.
-    enum EditAction { case pen, blur }
+    /// One undoable action, newest last — lets ⌘Z undo pen, blur and crop in the
+    /// real order they happened, regardless of which tool is currently selected.
+    enum EditAction { case pen, blur, crop }
 
-    let baseImage: NSImage
-    let imagePixelSize: CGSize
-    let displaySize: CGSize
+    // Image/canvas geometry. `var` (not `let`) because Crop swaps in a smaller
+    // image and recomputes the display size; they're @Published so the canvas
+    // redraws at the new size the instant a crop is applied or undone.
+    @Published private(set) var baseImage: NSImage
+    @Published private(set) var imagePixelSize: CGSize
+    @Published private(set) var displaySize: CGSize
     let fileURL: URL
     /// Byte size of the original file, read once at init (the editor shows it and
     /// it can't change mid-edit — avoids a per-frame stat on the main thread).
@@ -134,16 +137,23 @@ final class EditorModel: ObservableObject {
             CGSize(width: $0.pixelsWide, height: $0.pixelsHigh)
         } ?? img.size
         self.imagePixelSize = px
-        let maxW: CGFloat = 1000, maxH: CGFloat = 640
-        let scale = min(maxW / px.width, maxH / px.height, 1)
-        self.displaySize = CGSize(width: (px.width * scale).rounded(),
-                                  height: (px.height * scale).rounded())
+        self.displaySize = Self.fittedDisplaySize(for: px)
         // Text starts at bottom-center.
         self.textWM.center = CGPoint(x: displaySize.width / 2, y: displaySize.height * 0.85)
         // Optionally pre-fill the last-used text (Settings toggle).
         if UserDefaults.standard.bool(forKey: Self.rememberTextKey) {
             self.textWM.text = UserDefaults.standard.string(forKey: Self.lastTextKey) ?? ""
         }
+    }
+
+    /// Fit a pixel size into the editor's max authoring box (1000×640), never
+    /// upscaling. Used at init and after a crop so the canvas geometry stays
+    /// consistent across both.
+    static func fittedDisplaySize(for px: CGSize) -> CGSize {
+        let maxW: CGFloat = 1000, maxH: CGFloat = 640
+        let scale = min(maxW / px.width, maxH / px.height, 1)
+        return CGSize(width: (px.width * scale).rounded(),
+                      height: (px.height * scale).rounded())
     }
 
     // MARK: - Pen
@@ -161,13 +171,85 @@ final class EditorModel: ObservableObject {
     // MARK: - Unified undo (⌘Z)
 
     var canUndo: Bool { !undoStack.isEmpty }
-    /// Undo the most recent pen stroke or blur region, in draw order.
+    /// Undo the most recent pen stroke, blur region, or crop — in the order they
+    /// actually happened.
     func undoLast() {
         guard let last = undoStack.popLast() else { return }
         switch last {
         case .pen:  if !strokes.isEmpty { strokes.removeLast() }
         case .blur: if !blurRegions.isEmpty { blurRegions.removeLast() }
+        case .crop: restoreCrop()
         }
+    }
+
+    // MARK: - Crop (자르기)
+
+    /// Snapshot of everything a crop replaces, so ⌘Z can restore both the pre-crop
+    /// image *and* the edits that were flattened into it.
+    private struct CropSnapshot {
+        let baseImage: NSImage
+        let imagePixelSize: CGSize
+        let displaySize: CGSize
+        let strokes: [PenStroke]
+        let blurRegions: [BlurRegion]
+        let textWM: TextWatermark
+        let logoWM: LogoWatermark?
+        let undoStack: [EditAction]
+    }
+    private var cropSnapshots: [CropSnapshot] = []
+
+    /// Crop to `rectInDisplay` (display-space, top-left origin). Destructive but
+    /// undoable: the current pen/blur/watermark edits are first flattened into the
+    /// image at full pixel resolution, then it's cropped to the rect and the live
+    /// edit layers are cleared (they now live inside the pixels). ⌘Z restores the
+    /// prior state via the snapshot above.
+    func applyCrop(_ rectInDisplay: CGRect) {
+        // Clamp to the canvas; ignore a too-small selection.
+        let r = rectInDisplay.intersection(CGRect(origin: .zero, size: displaySize))
+        guard r.width > 8, r.height > 8 else { return }
+        // Flatten current edits at pixel resolution, then crop that bitmap.
+        guard let rep = renderBitmap(), let cg = rep.cgImage else { return }
+        let scale = imagePixelSize.width / displaySize.width
+        let pxRect = CGRect(x: r.minX * scale, y: r.minY * scale,
+                            width: r.width * scale, height: r.height * scale)
+            .integral
+            .intersection(CGRect(origin: .zero, size: imagePixelSize))
+        guard pxRect.width >= 1, pxRect.height >= 1,
+              let cropped = cg.cropping(to: pxRect) else { return }
+
+        cropSnapshots.append(CropSnapshot(
+            baseImage: baseImage, imagePixelSize: imagePixelSize, displaySize: displaySize,
+            strokes: strokes, blurRegions: blurRegions, textWM: textWM, logoWM: logoWM,
+            undoStack: undoStack))
+
+        let newPx = CGSize(width: pxRect.width, height: pxRect.height)
+        baseImage = NSImage(cgImage: cropped, size: newPx)
+        imagePixelSize = newPx
+        displaySize = Self.fittedDisplaySize(for: newPx)
+        // The edits are now baked into the image — reset the live layers.
+        strokes = []
+        blurRegions = []
+        logoWM = nil
+        gaussianCache = nil
+        mosaicCache = nil
+        textWM = TextWatermark()
+        textWM.center = CGPoint(x: displaySize.width / 2, y: displaySize.height * 0.85)
+        undoStack.append(.crop)
+    }
+
+    /// Restore the image + edits saved just before the most recent crop.
+    private func restoreCrop() {
+        guard let s = cropSnapshots.popLast() else { return }
+        baseImage = s.baseImage
+        imagePixelSize = s.imagePixelSize
+        displaySize = s.displaySize
+        strokes = s.strokes
+        blurRegions = s.blurRegions
+        textWM = s.textWM
+        logoWM = s.logoWM
+        undoStack = s.undoStack
+        gaussianCache = nil
+        mosaicCache = nil
     }
 
     // MARK: - Easter egg

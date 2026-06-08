@@ -30,6 +30,11 @@ struct EditorView: View {
     @ObservedObject private var loc = LocalizationManager.shared
     var onClose: () -> Void
 
+    /// The current display's pixel scale (2 on Retina). Used so the zoom % badge
+    /// reads "100% = 1 image pixel : 1 screen pixel", like Preview.app — without
+    /// it the badge ignored Retina and always showed about half the real value.
+    @Environment(\.displayScale) private var displayScale
+
     @State private var textDragStart: CGPoint?
     @State private var logoDragStart: CGPoint?
     @State private var hoverLocation: CGPoint?   // for the blur brush/area guide
@@ -44,6 +49,9 @@ struct EditorView: View {
     /// after the pointer leaves it, so it stops covering the canvas.
     @State private var popoverVisible = true
     @State private var popoverHideTask: DispatchWorkItem?
+    /// Crop tool: the kept-region rectangle currently being dragged, in
+    /// display-space (top-left origin). nil = nothing selected yet.
+    @State private var cropRect: CGRect?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -136,6 +144,10 @@ struct EditorView: View {
                     var h = Path(); h.move(to: CGPoint(x: 0, y: hy)); h.addLine(to: CGPoint(x: model.displaySize.width, y: hy))
                     strokeGuide(h, in: ctx, emphasized: true)
                 }
+
+                // Crop tool: dim everything outside the kept rect, with a thirds
+                // grid + bright border inside; a crosshair guide before dragging.
+                if model.tool == .crop { drawCropOverlay(in: ctx) }
             }
             .frame(width: model.displaySize.width, height: model.displaySize.height)
             .gesture(
@@ -150,13 +162,19 @@ struct EditorView: View {
                             else { model.updateBlurRect(from: value.startLocation, to: value.location) }
                         case .watermark:
                             break   // handled by each watermark overlay's own drag
+                        case .crop:
+                            // Drag out the kept-region rectangle, clamped to the canvas.
+                            let s = value.startLocation, l = value.location
+                            let raw = CGRect(x: min(s.x, l.x), y: min(s.y, l.y),
+                                             width: abs(l.x - s.x), height: abs(l.y - s.y))
+                            cropRect = raw.intersection(CGRect(origin: .zero, size: model.displaySize))
                         }
                     }
                     .onEnded { _ in
                         switch model.tool {
                         case .pen: model.commit()
                         case .blur: model.commitBlur()
-                        case .watermark: break
+                        case .watermark, .crop: break   // crop keeps its rect until applied
                         }
                     }
             )
@@ -194,9 +212,11 @@ struct EditorView: View {
         .onChange(of: model.textWM.text) { newValue in
             model.maybeTriggerBurst(for: newValue)
         }
-        // Switching away from the watermark tool ends any text editing.
+        // Switching away from the watermark tool ends any text editing; leaving
+        // the crop tool drops the pending (un-applied) crop selection.
         .onChange(of: model.tool) { newTool in
             if newTool != .watermark { endTextEditing() }
+            if newTool != .crop { cropRect = nil }
         }
     }
 
@@ -348,6 +368,34 @@ struct EditorView: View {
                    style: StrokeStyle(lineWidth: emphasized ? 1.5 : 1, dash: dash))
     }
 
+    /// Draw the crop tool's overlay: outside the kept rect is dimmed, with a
+    /// rule-of-thirds grid and a bright dashed border inside. Before a rect exists
+    /// (hover only) a crosshair shows where the drag will start.
+    private func drawCropOverlay(in ctx: GraphicsContext) {
+        let full = CGRect(origin: .zero, size: model.displaySize)
+        if let r = cropRect, r.width > 1, r.height > 1 {
+            // Dim outside: fill the whole canvas, punch out the kept rect (even-odd).
+            var outside = Path(full)
+            outside.addPath(Path(r))
+            ctx.fill(outside, with: .color(.black.opacity(0.5)), style: FillStyle(eoFill: true))
+            // Rule-of-thirds grid inside the kept rect.
+            var grid = Path()
+            for i in 1...2 {
+                let x = r.minX + r.width * CGFloat(i) / 3
+                grid.move(to: CGPoint(x: x, y: r.minY)); grid.addLine(to: CGPoint(x: x, y: r.maxY))
+                let y = r.minY + r.height * CGFloat(i) / 3
+                grid.move(to: CGPoint(x: r.minX, y: y)); grid.addLine(to: CGPoint(x: r.maxX, y: y))
+            }
+            ctx.stroke(grid, with: .color(.white.opacity(0.3)), lineWidth: 0.5)
+            strokeGuide(Path(r), in: ctx, emphasized: true)
+        } else if let p = hoverLocation {
+            var v = Path(); v.move(to: CGPoint(x: p.x, y: 0)); v.addLine(to: CGPoint(x: p.x, y: model.displaySize.height))
+            var h = Path(); h.move(to: CGPoint(x: 0, y: p.y)); h.addLine(to: CGPoint(x: model.displaySize.width, y: p.y))
+            strokeGuide(v, in: ctx, emphasized: false)
+            strokeGuide(h, in: ctx, emphasized: false)
+        }
+    }
+
     private func blurPath(_ kind: BlurRegion.Kind) -> Path {
         switch kind {
         case .rect(let r):
@@ -380,6 +428,7 @@ struct EditorView: View {
             railTool(.pen, system: "pencil.tip")
             railTool(.blur, system: "drop.fill")
             railWatermarkTool()
+            railTool(.crop, system: "crop")
             Spacer()
             // Unified ⌘Z undo: removes the most recent pen stroke or blur region
             // in the order they were drawn, regardless of the current tool.
@@ -453,6 +502,7 @@ struct EditorView: View {
         case .pen: return L("editor.tool.pen")
         case .blur: return L("editor.tool.blur")
         case .watermark: return L("editor.tool.watermark")
+        case .crop: return L("editor.tool.crop")
         }
     }
 
@@ -516,6 +566,7 @@ struct EditorView: View {
                     case .pen: penControls
                     case .blur: blurControls
                     case .watermark: watermarkControls
+                    case .crop: cropControls
                     }
                 }
             }
@@ -607,10 +658,14 @@ struct EditorView: View {
         let px = model.imagePixelSize
         let ext = model.fileURL.pathExtension.uppercased()
         let bytes = model.originalByteCount
-        // Live zoom: how big the on-screen preview is vs the image's real pixels.
+        // Live zoom: how big the on-screen preview is vs the image's real pixels,
+        // in actual device pixels (so 100% = 1 image pixel drawn on 1 screen pixel).
         // displaySize = the editor's fixed authoring size; canvasScale = the
-        // GeometryReader fit-scale. Their product over pixel width = on-screen %.
-        let zoom = Int((model.displaySize.width * canvasScale / max(px.width, 1) * 100).rounded())
+        // GeometryReader fit-scale; displayScale = Retina factor (×2). Their product
+        // over pixel width = on-screen %. (Earlier this dropped displayScale, so the
+        // value came out ~half on Retina — the "weird number" the badge showed.)
+        let onScreenPx = model.displaySize.width * canvasScale * displayScale
+        let zoom = Int((onScreenPx / max(px.width, 1) * 100).rounded())
         return VStack(alignment: .trailing, spacing: 1) {
             HStack(spacing: 6) {
                 Text("\(Int(px.width)) × \(Int(px.height)) px")
@@ -819,6 +874,45 @@ struct EditorView: View {
                       help: L("editor.blur.intensity.help"))
         }
         .frame(width: 176)
+    }
+
+    // MARK: Crop controls — drag a region on the canvas, then apply.
+
+    /// True once the dragged crop rect is big enough to be a real selection.
+    private var hasCropSelection: Bool {
+        guard let r = cropRect else { return false }
+        return r.width > 8 && r.height > 8
+    }
+
+    private var cropControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L("editor.crop.hint"))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { applyCropSelection() } label: {
+                Label(L("editor.crop.apply"), systemImage: "crop")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(AppColors.accent)
+            .disabled(!hasCropSelection)
+            if hasCropSelection {
+                Button(L("editor.crop.reset")) { cropRect = nil }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+            }
+        }
+        .frame(width: 176)
+    }
+
+    /// Apply the current crop selection to the image, then clear the rect.
+    private func applyCropSelection() {
+        guard let r = cropRect else { return }
+        model.applyCrop(r)
+        cropRect = nil
     }
 
     private func pickLogoFromFile() {

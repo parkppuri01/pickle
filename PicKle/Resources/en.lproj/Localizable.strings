@@ -41,6 +41,7 @@
 "editor.tool.pen" = "Pen";
 "editor.tool.blur" = "Blur";
 "editor.tool.watermark" = "Watermark";
+"editor.tool.crop" = "Crop";
 "editor.undo.help" = "Undo (⌘Z)";
 "editor.cancel" = "Cancel";
 "editor.save" = "Save";
@@ -70,11 +71,16 @@
 "editor.blur.brushSize.help" = "Brush size";
 "editor.blur.intensity.help" = "Blur intensity";
 
+/* Crop controls */
+"editor.crop.hint" = "Drag the area you want to keep, then press Crop.";
+"editor.crop.apply" = "Crop";
+"editor.crop.reset" = "Reset selection";
+
 /* ===== Settings — tabs ===== */
+"settings.tab.general" = "General";
 "settings.tab.shortcuts" = "Shortcuts";
 "settings.tab.watermark" = "Watermark";
 "settings.tab.storage" = "Storage";
-"settings.tab.about" = "About";
 
 /* Settings — shortcuts */
 "settings.shortcuts.section" = "Global Shortcuts";

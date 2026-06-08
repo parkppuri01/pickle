@@ -41,6 +41,7 @@
 "editor.tool.pen" = "펜";
 "editor.tool.blur" = "블러";
 "editor.tool.watermark" = "워터마크";
+"editor.tool.crop" = "자르기";
 "editor.undo.help" = "되돌리기 (⌘Z)";
 "editor.cancel" = "취소";
 "editor.save" = "저장";
@@ -70,11 +71,16 @@
 "editor.blur.brushSize.help" = "브러시 크기";
 "editor.blur.intensity.help" = "블러 강도";
 
+/* Crop controls */
+"editor.crop.hint" = "남길 영역을 드래그한 뒤 ‘자르기’를 누르세요.";
+"editor.crop.apply" = "자르기";
+"editor.crop.reset" = "선택 취소";
+
 /* ===== Settings — tabs ===== */
+"settings.tab.general" = "일반";
 "settings.tab.shortcuts" = "단축키";
 "settings.tab.watermark" = "워터마크";
-"settings.tab.storage" = "보관";
-"settings.tab.about" = "정보";
+"settings.tab.storage" = "저장공간";
 
 /* Settings — shortcuts */
 "settings.shortcuts.section" = "전역 단축키";
