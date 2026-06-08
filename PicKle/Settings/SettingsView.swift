@@ -15,7 +15,7 @@ struct SettingsView: View {
             ShortcutsSettingsTab()
                 .tabItem { Label(L("settings.tab.shortcuts"), systemImage: "command") }
             WatermarkSettingsTab()
-                .tabItem { Label(L("settings.tab.watermark"), systemImage: "textformat") }
+                .tabItem { Label(L("settings.tab.watermark"), systemImage: "signature") }
             StorageSettingsTab()
                 .tabItem { Label(L("settings.tab.storage"), systemImage: "tray.full") }
             AboutTab()

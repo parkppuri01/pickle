@@ -21,6 +21,9 @@ final class SelectionOverlayView: NSView {
 
     private var startPoint: NSPoint?
     private var selection: NSRect = .zero
+    /// Hold Space mid-drag to reposition the whole selection (⇧⌘5 behaviour).
+    private var isMoving = false
+    private var lastDragPoint: NSPoint?
 
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -43,6 +46,8 @@ final class SelectionOverlayView: NSView {
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         startPoint = p
+        lastDragPoint = p
+        isMoving = false             // each drag starts by resizing; Space re-enables move
         selection = NSRect(origin: p, size: .zero)
         onDragBegan?()
         needsDisplay = true
@@ -55,13 +60,33 @@ final class SelectionOverlayView: NSView {
         // monitor, which would push the selection off-screen and capture black.
         p.x = min(max(p.x, 0), bounds.width)
         p.y = min(max(p.y, 0), bounds.height)
+        needsDisplay = true
+
+        // Space held → slide the whole rectangle by the mouse delta instead of
+        // resizing it. The anchor moves too, so releasing Space resumes resizing
+        // from the new position. (Matches macOS ⇧⌘5.)
+        if isMoving, let last = lastDragPoint {
+            var dx = p.x - last.x
+            var dy = p.y - last.y
+            // Clamp the move so the selection can't be pushed off this screen.
+            dx = min(max(dx, -selection.minX), bounds.width - selection.maxX)
+            dy = min(max(dy, -selection.minY), bounds.height - selection.maxY)
+            selection.origin.x += dx
+            selection.origin.y += dy
+            startPoint = NSPoint(x: s.x + dx, y: s.y + dy)
+            // Advance the anchor by the *applied* (clamped) delta, not the raw
+            // cursor, so pushing past a screen edge doesn't desync cursor↔selection.
+            lastDragPoint = NSPoint(x: last.x + dx, y: last.y + dy)
+            return
+        }
         selection = NSRect(x: min(s.x, p.x), y: min(s.y, p.y),
                            width: abs(p.x - s.x), height: abs(p.y - s.y))
-        needsDisplay = true
+        lastDragPoint = p
     }
     override func mouseUp(with event: NSEvent) {
         let r = selection
         startPoint = nil
+        lastDragPoint = nil
         selection = .zero
         needsDisplay = true
         if r.width >= 5, r.height >= 5 { onCommit?(r) } else { onCancel?() }
@@ -69,6 +94,11 @@ final class SelectionOverlayView: NSView {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { onCancel?() } else { super.keyDown(with: event) }
     }
+
+    /// Toggle "move the selection" mode. Driven by the controller's Space key
+    /// monitor: Space events land on the key overlay, which may differ from the
+    /// overlay being dragged, so the controller broadcasts this to all of them.
+    func setMoving(_ moving: Bool) { isMoving = moving }
 
     override func draw(_ dirtyRect: NSRect) {
         // Dim this screen.
@@ -247,8 +277,19 @@ final class RegionSelectController {
     // MARK: - Keyboard (single source of truth for Esc / arrows)
 
     private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let model = self.barModel else { return event }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self else { return event }
+            // Space toggles "move the selection" on whichever overlay is mid-drag.
+            // Key events go to the key overlay, which may not be the dragged one,
+            // so broadcast to every overlay (only the dragging one actually moves).
+            if event.keyCode == 49 {
+                let moving = event.type == .keyDown
+                for win in self.overlays {
+                    (win.contentView as? SelectionOverlayView)?.setMoving(moving)
+                }
+                return nil
+            }
+            guard event.type == .keyDown, let model = self.barModel else { return event }
             switch event.keyCode {
             case 53: self.cancel(); return nil          // Esc
             case 123: model.move(-1); return nil         // ←

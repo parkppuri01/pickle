@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --win:#1f1f22; --rail:#19191b; --col:#26262b; --pop:#2c2c32;
+    --ink:rgba(255,255,255,.88); --dim:rgba(255,255,255,.30);
+    --accent:#6FAE4E; --accent-ink:#0e2207;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#0d0d0f; padding:40px 40px 48px;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+    color:var(--ink); display:flex; flex-direction:column; gap:42px; align-items:center;
+    -webkit-font-smoothing:antialiased;
+  }
+  .variant{width:920px}
+  .vhead{margin-bottom:14px}
+  .vtag{display:inline-block;background:var(--accent);color:var(--accent-ink);
+    font-weight:800;font-size:12px;padding:3px 9px;border-radius:7px;margin-right:10px;letter-spacing:.3px}
+  .vname{font-size:17px;font-weight:700}
+  .vdesc{color:#9a9aa3;font-size:13px;margin-top:8px;line-height:1.55}
+  .vdesc b{color:#cfcfd6;font-weight:600}
+
+  .win{height:452px;background:var(--win);border-radius:14px;overflow:hidden;
+    box-shadow:0 20px 55px rgba(0,0,0,.55);display:flex;flex-direction:column;
+    border:1px solid rgba(255,255,255,.07)}
+  .topbar{height:54px;flex:none;display:flex;align-items:center;gap:12px;
+    padding:0 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+  .tbtitle{font-size:13px;color:var(--dim)}
+  .spacer{flex:1}
+  .badge{text-align:right;line-height:1.3}
+  .badge .l1{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;display:flex;gap:7px;justify-content:flex-end}
+  .badge .pct{color:var(--accent)}
+  .badge .l2{font-size:10px;color:#85858c;margin-top:1px}
+  .btn{font-size:12.5px;padding:5px 13px;border-radius:8px;background:rgba(255,255,255,.09)}
+  .btn.save{background:var(--accent);color:var(--accent-ink);font-weight:700}
+
+  .body{flex:1;display:flex;min-height:0}
+  .rail{width:54px;flex:none;background:var(--rail);display:flex;flex-direction:column;
+    align-items:center;gap:9px;padding:12px 0}
+  .tool{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+  .tool.sel{background:var(--accent);color:var(--accent-ink)}
+  .tool svg{width:20px;height:20px}
+  .railspace{flex:1}
+
+  /* second vertical column (variant A) */
+  .col2{width:158px;flex:none;background:var(--col);border-right:1px solid rgba(255,255,255,.06);
+    padding:14px 12px;display:flex;flex-direction:column;gap:9px}
+  .col2 .ctitle{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px}
+  .chip{background:rgba(255,255,255,.07);border-radius:9px;padding:9px 11px;font-size:12.5px;display:flex;align-items:center;gap:8px}
+  .chip.accent{background:var(--accent);color:var(--accent-ink);font-weight:700;justify-content:center}
+  .chip svg{width:15px;height:15px;opacity:.8}
+  .chip .mini{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.18);position:relative}
+  .chip .mini::after{content:"";position:absolute;left:0;top:-4px;width:12px;height:12px;border-radius:50%;background:#d8d8de;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .chip .mini.p60::after{left:58%}
+  .chip .mini.p40::after{left:38%}
+  .cdiv{height:1px;background:rgba(255,255,255,.08);margin:3px 0}
+
+  /* canvas */
+  .canvas{flex:1;position:relative;display:flex;align-items:center;justify-content:center;
+    background-image:repeating-conic-gradient(#2b2b30 0 25%, #232328 0 50%);background-size:24px 24px}
+  .shot{width:60%;height:64%;border-radius:7px;position:relative;overflow:hidden;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);
+    background:linear-gradient(135deg,#3a5b8c 0%,#6b4f86 55%,#9c5a6b 100%)}
+  .shot .glass{position:absolute;inset:0;background:
+    radial-gradient(120px 80px at 30% 25%,rgba(255,255,255,.18),transparent 70%)}
+  .wm{position:absolute;left:50%;top:62%;transform:transl(-50%,-50%);transform:translateX(-50%);
+    font-size:19px;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);white-space:nowrap;display:flex;align-items:center}
+  .caret{display:inline-block;width:2px;height:21px;background:#fff;margin-left:2px;box-shadow:0 0 4px rgba(255,255,255,.6)}
+  .hint{position:absolute;left:50%;top:62%;transform:translateX(-50%) translateY(20px);
+    margin-top:14px;font-size:11px;color:#fff;background:rgba(0,0,0,.5);padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .hint::before{content:"";position:absolute;left:50%;top:-12px;transform:translateX(-50%);
+    border:6px solid transparent;border-bottom-color:rgba(0,0,0,.5)}
+
+  /* popover (variant B) */
+  .pop{position:absolute;left:62px;top:96px;width:172px;background:var(--pop);border-radius:12px;
+    padding:13px 12px;display:flex;flex-direction:column;gap:9px;
+    box-shadow:0 14px 40px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.09);z-index:5}
+  .pop::before{content:"";position:absolute;left:-7px;top:24px;border:7px solid transparent;border-right-color:var(--pop)}
+  .pop .ctitle{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+
+  /* accordion (variant C) */
+  .railWide{width:172px;flex:none;background:var(--rail);padding:12px 12px;display:flex;flex-direction:column;gap:8px}
+  .arow{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:10px;color:var(--ink);font-size:13px}
+  .arow svg{width:19px;height:19px}
+  .arow.sel{background:rgba(111,174,78,.16);color:#cfe9bd}
+  .arow.sel .ic{color:var(--accent)}
+  .acc{margin:2px 0 6px;padding:11px;border-radius:10px;background:rgba(0,0,0,.22);display:flex;flex-direction:column;gap:9px}
+  .swrow{display:flex;gap:8px}
+  .sw{width:18px;height:18px;border-radius:50%}
+  .row-lab{font-size:11px;color:var(--dim)}
+</style>
+</head>
+<body>
+
+<!-- ============ VARIANT A ============ -->
+<div class="variant">
+  <div class="vhead">
+    <span class="vtag">시안 A</span><span class="vname">2단 세로 메뉴 (형이 말한 방식)</span>
+    <div class="vdesc">왼쪽 아이콘 3개 중 하나를 누르면 <b>같은 세로 형태의 두 번째 칸이 옆으로 펼쳐지고</b>, 그 안에서 옵션을 고릅니다.
+      워터마크 텍스트는 칸의 <b>＋텍스트 추가</b>를 누르면 캔버스에 바로 커서가 생겨 <b>화면에서 직접 입력</b>.</div>
+  </div>
+  <div class="win">
+    <div class="topbar">
+      <span class="tbtitle">스크린샷 편집</span>
+      <span class="spacer"></span>
+      <div class="badge"><div class="l1"><span>2880 × 1800 px</span><span class="pct">35%</span></div><div class="l2">1.2 MB · PNG</div></div>
+      <span class="btn">취소</span><span class="btn save">저장</span>
+    </div>
+    <div class="body">
+      <div class="rail">
+        <div class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+        <div class="tool"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11Z"/></svg></div>
+        <div class="tool sel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 6h14M12 6v13"/></svg></div>
+        <div class="railspace"></div>
+        <div class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></div>
+      </div>
+      <div class="col2">
+        <div class="ctitle">워터마크</div>
+        <div class="chip accent">＋ 텍스트 추가</div>
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 16-5-5L5 20"/></svg> 로고 추가…</div>
+        <div class="cdiv"></div>
+        <div class="chip"><span class="row-lab">투명</span><span class="mini p60"></span></div>
+        <div class="chip"><span class="row-lab">크기</span><span class="mini p40"></span></div>
+      </div>
+      <div class="canvas">
+        <div class="shot"><div class="glass"></div>
+          <div class="wm">내 워터마크<span class="caret"></span></div>
+          <div class="hint">캔버스에서 바로 입력</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VARIANT B ============ -->
+<div class="variant">
+  <div class="vhead">
+    <span class="vtag">시안 B</span><span class="vname">떠 있는 팝오버 (공간 절약형)</span>
+    <div class="vdesc">두 번째 칸을 고정하지 않고, 누른 아이콘 <b>바로 옆에 작은 말풍선(팝오버)</b>으로 옵션이 뜹니다.
+      캔버스를 더 넓게 쓰고, 다른 도구를 누르면 팝오버가 옮겨갑니다. 캔버스 직접 입력은 동일.</div>
+  </div>
+  <div class="win">
+    <div class="topbar">
+      <span class="tbtitle">스크린샷 편집</span>
+      <span class="spacer"></span>
+      <div class="badge"><div class="l1"><span>2880 × 1800 px</span><span class="pct">35%</span></div><div class="l2">1.2 MB · PNG</div></div>
+      <span class="btn">취소</span><span class="btn save">저장</span>
+    </div>
+    <div class="body" style="position:relative">
+      <div class="rail">
+        <div class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+        <div class="tool"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11Z"/></svg></div>
+        <div class="tool sel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 6h14M12 6v13"/></svg></div>
+        <div class="railspace"></div>
+        <div class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></div>
+      </div>
+      <div class="pop">
+        <div class="ctitle">워터마크</div>
+        <div class="chip accent">＋ 텍스트 추가</div>
+        <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 16-5-5L5 20"/></svg> 로고 추가…</div>
+        <div class="cdiv"></div>
+        <div class="chip"><span class="row-lab">투명</span><span class="mini p60"></span></div>
+        <div class="chip"><span class="row-lab">크기</span><span class="mini p40"></span></div>
+      </div>
+      <div class="canvas">
+        <div class="shot"><div class="glass"></div>
+          <div class="wm">내 워터마크<span class="caret"></span></div>
+          <div class="hint">캔버스에서 바로 입력</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VARIANT C ============ -->
+<div class="variant">
+  <div class="vhead">
+    <span class="vtag">시안 C</span><span class="vname">아코디언 (한 칸에서 펼침)</span>
+    <div class="vdesc">칸을 늘리지 않고, 선택한 도구의 <b>아이콘 아래가 펼쳐지며</b> 옵션이 세로로 나옵니다(한 열 안에서 해결).
+      나머지 도구는 아이콘 줄로 그대로. 펜 색·굵기처럼 항목 많은 도구에 특히 깔끔.</div>
+  </div>
+  <div class="win">
+    <div class="topbar">
+      <span class="tbtitle">스크린샷 편집</span>
+      <span class="spacer"></span>
+      <div class="badge"><div class="l1"><span>2880 × 1800 px</span><span class="pct">35%</span></div><div class="l2">1.2 MB · PNG</div></div>
+      <span class="btn">취소</span><span class="btn save">저장</span>
+    </div>
+    <div class="body">
+      <div class="railWide">
+        <div class="arow"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span> 펜</div>
+        <div class="arow"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11Z"/></svg></span> 블러</div>
+        <div class="arow sel"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 6h14M12 6v13"/></svg></span> 워터마크</div>
+        <div class="acc">
+          <div class="chip accent">＋ 텍스트 추가</div>
+          <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 16-5-5L5 20"/></svg> 로고…</div>
+          <div class="chip"><span class="row-lab">투명</span><span class="mini p60"></span></div>
+          <div class="chip"><span class="row-lab">크기</span><span class="mini p40"></span></div>
+        </div>
+      </div>
+      <div class="canvas">
+        <div class="shot"><div class="glass"></div>
+          <div class="wm">내 워터마크<span class="caret"></span></div>
+          <div class="hint">캔버스에서 바로 입력</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -46,11 +46,13 @@
 "editor.save" = "Save";
 
 /* Watermark controls */
-"editor.text.label" = "Text";
-"editor.text.placeholder" = "Watermark text";
+"editor.text.add" = "Add text";
+"editor.text.edit" = "Edit text";
 "editor.text.clear.help" = "Clear text";
 "editor.text.opacity.help" = "Text opacity";
 "editor.text.size.help" = "Text size";
+"editor.text.tracking.help" = "Letter spacing";
+"editor.text.linespacing.help" = "Line spacing";
 "editor.logo.label" = "Logo";
 "editor.logo.clear.help" = "Remove logo";
 "editor.logo.opacity.help" = "Logo opacity";

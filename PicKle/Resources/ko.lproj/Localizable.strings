@@ -46,11 +46,13 @@
 "editor.save" = "저장";
 
 /* Watermark controls */
-"editor.text.label" = "글자";
-"editor.text.placeholder" = "워터마크 텍스트";
+"editor.text.add" = "텍스트 추가";
+"editor.text.edit" = "텍스트 편집";
 "editor.text.clear.help" = "텍스트 지우기";
 "editor.text.opacity.help" = "글자 투명도";
 "editor.text.size.help" = "글자 크기";
+"editor.text.tracking.help" = "자간 (글자 간격)";
+"editor.text.linespacing.help" = "줄 간격";
 "editor.logo.label" = "로고";
 "editor.logo.clear.help" = "로고 지우기";
 "editor.logo.opacity.help" = "로고 투명도";

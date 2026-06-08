@@ -29,7 +29,13 @@ struct TextWatermark {
     var center: CGPoint = .zero
     var scale: CGFloat = 1.0
     var opacity: Double = 0.85
-    var isActive: Bool { !text.trimmingCharacters(in: .whitespaces).isEmpty }
+    /// Letter spacing (자간) and extra line gap (줄간격), in base-font points —
+    /// both scale with `scale` so they stay proportional as the text resizes.
+    var tracking: CGFloat = 0
+    var lineSpacing: CGFloat = 0
+    /// Paragraph alignment for multi-line text (좌/중/우).
+    var alignment: NSTextAlignment = .center
+    var isActive: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
 
 /// Logo (image) watermark — independent of the text watermark.
@@ -79,6 +85,9 @@ final class EditorModel: ObservableObject {
     // Watermark — text and logo are independent (both can be active at once).
     @Published var textWM = TextWatermark()
     @Published var logoWM: LogoWatermark?
+    /// True while the user is typing the text watermark *directly on the canvas*
+    /// (0.5.0). Swaps the static watermark Text for an inline editable field.
+    @Published var isEditingText = false
 
     // Blur
     @Published var blurStyle: BlurStyle = .gaussian
@@ -325,7 +334,6 @@ final class EditorModel: ObservableObject {
 
     private func drawTextWatermark(scale: CGFloat) {
         guard textWM.isActive else { return }
-        let text = textWM.text.trimmingCharacters(in: .whitespaces)
         let cx = textWM.center.x * scale
         let cy = imagePixelSize.height - textWM.center.y * scale
         let fontSize = Self.watermarkBaseFont * textWM.scale * scale
@@ -333,14 +341,25 @@ final class EditorModel: ObservableObject {
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.55)
         shadow.shadowBlurRadius = fontSize * 0.10
         shadow.shadowOffset = NSSize(width: 0, height: -fontSize * 0.04)
+        // Center alignment + line gap (줄간격); kerning (자간) is a glyph attribute.
+        let para = NSMutableParagraphStyle()
+        para.alignment = textWM.alignment
+        para.lineSpacing = textWM.lineSpacing * textWM.scale * scale
         let attrs: [NSAttributedString.Key: Any] = [
             .font: Self.watermarkNSFont(size: fontSize),
             .foregroundColor: NSColor.white.withAlphaComponent(textWM.opacity),
+            .kern: textWM.tracking * textWM.scale * scale,
+            .paragraphStyle: para,
             .shadow: shadow,
         ]
-        let str = NSAttributedString(string: text, attributes: attrs)
-        let size = str.size()
-        str.draw(at: NSPoint(x: cx - size.width / 2, y: cy - size.height / 2))
+        // Keep the exact text (incl. newlines) so the saved image matches the
+        // on-canvas preview. usesLineFragmentOrigin lays out multiple lines.
+        let str = NSAttributedString(string: textWM.text, attributes: attrs)
+        let b = str.boundingRect(with: NSSize(width: 1_000_000, height: 1_000_000),
+                                 options: [.usesLineFragmentOrigin])
+        let rect = NSRect(x: cx - b.width / 2, y: cy - b.height / 2,
+                          width: b.width, height: b.height)
+        str.draw(with: rect, options: [.usesLineFragmentOrigin])
     }
 
     private func drawLogoWatermark(scale: CGFloat) {
