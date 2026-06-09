@@ -83,14 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// selects on a still image and we capture exactly what was on screen at press
     /// time — the floating bar / overlay appearing can't change what gets captured.
     private func presentCaptureMenu(_ mode: CaptureMode) {
-        if #available(macOS 14.0, *) {
-            Task { @MainActor in
-                let frozen = await CaptureService.shared.freezeScreens()
-                self.beginRegionSelect(mode, frozen: frozen)
-            }
-        } else {
-            beginRegionSelect(mode, frozen: [:])   // macOS 13: live overlay (no freeze)
-        }
+        // Live overlay, NO up-front freeze: the dimmed crosshair appears over the
+        // live screen the instant the shortcut fires (like ⌘⇧4), with no full-screen
+        // ScreenCaptureKit snapshot first — that snapshot was what made the whole
+        // screen briefly "shrink" (a system effect of SCK capture we can't disable).
+        // The chosen region is captured on commit instead (overlay already gone).
+        beginRegionSelect(mode, frozen: [:])
     }
 
     private func beginRegionSelect(_ mode: CaptureMode, frozen: [CGDirectDisplayID: CGImage]) {

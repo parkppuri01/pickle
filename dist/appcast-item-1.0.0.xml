@@ -1,6 +1,6 @@
         <item>
             <title>PICkle 1.0.0</title>
-            <pubDate>Tue, 09 Jun 2026 08:35:21 +0000</pubDate>
+            <pubDate>Tue, 09 Jun 2026 14:10:44 +0000</pubDate>
             <sparkle:version>6</sparkle:version>
             <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
@@ -10,7 +10,7 @@
 <h3>캡처</h3>
 <ul>
 <li>단축키로 영역 캡처 — 저장(⇧⌥S) · 편집(⇧⌥D) · 클립보드(⇧⌥A)</li>
-<li>단축키를 누른 순간 화면을 고정해, 영상·애니메이션도 원하는 장면 그대로 캡처</li>
+<li>단축키를 누르면 화면 변화 없이 바로 십자선으로 영역 선택 (macOS 기본 캡처처럼)</li>
 <li>드래그 중 선택 영역의 픽셀 크기 표시, 스페이스바로 영역 이동</li>
 <li>보관함 열기 단축키(⇧⌥F)</li>
 </ul>
@@ -30,5 +30,5 @@
             <!-- ⚠️ Put the REAL DMG download URL here (GitHub Release asset, etc.). -->
             <enclosure url="https://pizza-clip.com/pickle/PICkle-1.0.0.dmg"
                        type="application/octet-stream"
-                       sparkle:edSignature="sNwPBqKAvgw0WCtF1+SSR1Sma3SCbueEIix1ZVG5VOLjlhPvHkh/BGVjg1urtTVa3ouoR7ZxM8CGMdeinJShAQ==" length="3632090" />
+                       sparkle:edSignature="afUVrW5vB7ySukVbRz9141nhv2pEGxE0WONMhvOH2xbQNxz8Pbfw5wl4DUwOyZP/VIs7+q6U9aUxVtcE6pI9Aw==" length="3619805" />
         </item>

@@ -22,8 +22,12 @@ final class SelectionOverlayView: NSView {
     /// Frozen screenshot of this view's screen, captured the instant the shortcut
     /// fired. When set it's drawn as the backdrop and the crop is taken from it, so
     /// what gets captured is exactly the screen at shortcut-press time (not later).
+    /// Applied a beat AFTER the overlay appears (see `applyFreeze`), so the screen
+    /// darkens instantly and the still image swaps in once the snapshot is ready.
     var freezeImage: CGImage?
     var freezeScale: CGFloat = 2
+    /// This overlay's display ID, so a late freeze can be matched to the right view.
+    var screenID: CGDirectDisplayID = 0
 
     private var startPoint: NSPoint?
     private var selection: NSRect = .zero
@@ -107,40 +111,25 @@ final class SelectionOverlayView: NSView {
     func setMoving(_ moving: Bool) { isMoving = moving }
 
     override func draw(_ dirtyRect: NSRect) {
-        // Frozen backdrop: the screen exactly as it was when the shortcut fired, so
-        // the user selects on a still image. With no freeze (e.g. macOS 13) the view
-        // stays transparent over the live screen, matching the old behaviour.
-        if let frozen = freezeImage {
-            NSImage(cgImage: frozen, size: bounds.size).draw(in: bounds)
-        }
-        // Dim everything.
-        NSColor.black.withAlphaComponent(0.30).setFill()
+        // Near-invisible fill (1% black) so the overlay still RECEIVES the mouse drag.
+        // A fully transparent window lets clicks pass THROUGH to the app underneath,
+        // so the drag never builds a selection (it looked like the capture "let go").
+        // Visually the screen still looks unchanged, like ⌘⇧4 — no dim, no freeze.
+        NSColor.black.withAlphaComponent(0.01).setFill()
         bounds.fill()
-        guard selection.width > 0, selection.height > 0,
-              let ctx = NSGraphicsContext.current?.cgContext else { return }
-        // Reveal the selection: redraw the frozen image sharp inside it; with no
-        // freeze, punch the dim out so the live screen shows through there.
-        if let frozen = freezeImage {
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(rect: selection).setClip()
-            NSImage(cgImage: frozen, size: bounds.size).draw(in: bounds)
-            NSGraphicsContext.restoreGraphicsState()
-        } else {
-            ctx.setBlendMode(.clear)
-            ctx.fill(selection)
-            ctx.setBlendMode(.normal)
-        }
-        // Pickle-green outline.
-        let path = NSBezierPath(rect: selection)
-        path.lineWidth = 2
+        guard selection.width > 0, selection.height > 0 else { return }
+        // Pickle-green outline around the selection. A thin dark underlay keeps it
+        // visible over any background (no dimming to provide contrast now).
+        NSColor.black.withAlphaComponent(0.55).setStroke()
+        let under = NSBezierPath(rect: selection); under.lineWidth = 3; under.stroke()
         NSColor(srgbRed: 0.43, green: 0.68, blue: 0.31, alpha: 1).setStroke()
-        path.stroke()
+        let path = NSBezierPath(rect: selection); path.lineWidth = 1.5; path.stroke()
 
         // Live pixel dimensions near the cursor, like the macOS screenshot HUD.
         // selection is in points; multiply by the screen's backing scale for the
         // actual captured pixel count (Retina = ×2).
         if let cursor = lastDragPoint {
-            let scale = freezeImage != nil ? freezeScale : (window?.backingScaleFactor ?? 2)
+            let scale = window?.backingScaleFactor ?? 2
             let wpx = Int((selection.width * scale).rounded())
             let hpx = Int((selection.height * scale).rounded())
             drawDimensionBadge("\(wpx) × \(hpx)", near: cursor)
@@ -235,11 +224,14 @@ final class RegionSelectController {
 
             let view = SelectionOverlayView(frame: NSRect(origin: .zero, size: screen.frame.size))
             let screenOrigin = screen.frame.origin
-            // Hand this screen's frozen snapshot to its overlay (if we have one).
-            if let sid = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value,
-               let img = frozen[sid] {
-                view.freezeImage = img
+            // Record this overlay's display ID + scale now; the frozen image is
+            // applied either right here (if already captured) or shortly after via
+            // applyFreeze — the usual path, where the overlay shows first and the
+            // freeze follows a beat later.
+            if let sid = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value {
+                view.screenID = sid
                 view.freezeScale = screen.backingScaleFactor
+                if let img = frozen[sid] { view.freezeImage = img }
             }
             view.onDragBegan = { [weak self] in self?.hideToolbar() }
             view.onCommit = { [weak self, weak view] rectInView in
@@ -260,6 +252,20 @@ final class RegionSelectController {
 
         showToolbar(anchorRect: anchorRect, shieldLevel: shield, model: model)
         installKeyMonitor()
+    }
+
+    /// Swap in the frozen screenshots after the overlays are already on screen, so
+    /// the screen darkens the instant the shortcut fires (no "shutter" pause while
+    /// the snapshot is taken). Each freeze is matched to its overlay by display ID.
+    func applyFreeze(_ frozen: [CGDirectDisplayID: CGImage]) {
+        guard !overlays.isEmpty else { return }
+        for win in overlays {
+            guard let view = win.contentView as? SelectionOverlayView,
+                  view.freezeImage == nil,   // only the first freeze; re-targets keep theirs
+                  let img = frozen[view.screenID] else { continue }
+            view.freezeImage = img
+            view.needsDisplay = true
+        }
     }
 
     // MARK: - Toolbar

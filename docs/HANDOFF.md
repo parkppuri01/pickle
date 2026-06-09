@@ -1,6 +1,6 @@
 # PICkle — HANDOFF (단일 진실 문서)
 
-> **마지막 업데이트**: 2026-06-09 · **🎉 1.0.0 정식 릴리스(MARKETING_VERSION=1.0.0, build 6)** · **현재 상태**: 1.0 출시 — 캡처 freeze·크롭 핸들 UX·줌% 제거·앱아이콘(pk)·이스터에그(폭탄피클)·보관함 단축키 ⌥⇧F·화면권한 설명 추가. **Sparkle 자동 업데이트 호스팅 완료**(pizzaClip web → `pizza-clip.com/pickle/appcast.xml`에 1.0 항목 서빙). 빌드·공증·appcast 서명·배치 완료. ↓아래 [✅ 2026-06-09 — 1.0.0 정식 릴리스] 참고.
+> **마지막 업데이트**: 2026-06-09 · **🎉 1.0.0 정식 릴리스(MARKETING_VERSION=1.0.0, build 6)** · **현재 상태**: 1.0 출시 — **캡처는 ⌘⇧4식 라이브(화면 변화 0, freeze 제거)**·크롭 핸들 UX·줌% 제거·앱아이콘(pk)·이스터에그(폭탄피클)·보관함 단축키 ⌥⇧F·화면권한 설명. **Sparkle 자동 업데이트 호스팅**(pizzaClip web → `pizza-clip.com/pickle/appcast.xml`). 라이브 캡처 반영해 DMG·appcast **재생성**. ↓아래 [✅ 2026-06-09 (저녁) — 캡처 라이브 전환] 참고.
 > **새 세션은 이 문서를 먼저 읽으면 컨텍스트가 잡힙니다.**
 > **▶ 다음 세션 할 일: 1.0 출시 후 새 요청부터. 1.1 릴리스는 위 [다음 릴리스(1.1+) 재현 순서] 그대로. 알려진 후속(보류): 편집 입력칸이 캔버스 `scaleEffect` 안에 있어 한글 IME 후보창 위치가 살짝 어긋날 수 있음(입력칸만 scaleEffect 밖으로 분리 권고).**
 > 느낌/DNA 가이드는 형 앱에서 물려받은 [`../pickle-느낌브리프.md`](../pickle-느낌브리프.md) 참고.
@@ -21,7 +21,7 @@
   - **아이콘 상태표시**: 캡처 내역 있으면 피클병, 비면 빈병 (메뉴바 + 폴더 아이콘 둘 다).
 - 단축키 3종 (Settings에서 변경 가능) → 누르면 **자체 영역선택 오버레이(⇧⌘5식)** + 모드바가 뜨고, 모드 프리셀렉트됨:
   - `⇧⌥S` 저장(바로 bottle) / `⇧⌥D` 편집(편집창) / `⇧⌥A` 클립보드(**bottle에 저장 안 함**, PizzaClip 켜져 있으면 그쪽으로)
-  - **단축키 누른 순간 전 화면을 freeze**(스냅샷) → 정지본 위에서 드래그로 영역 선택 → 그 정지본에서 잘라냄(ScreenCaptureKit, 멀티모니터 OK). **드래그 중 스페이스바 = 선택영역 통째 이동**(떼면 다시 크기조절). 드래그 중 커서 옆 **픽셀 치수(W×H)** 표시. ←/→ 모드변경, Esc/✕ 취소.
+  - 단축키 누르면 **화면 변화 없이**(⌘⇧4식·완전 투명 오버레이) 십자선 → 드래그로 영역 선택 → 그 영역만 캡처(ScreenCaptureKit, 멀티모니터 OK). **드래그 중 스페이스바 = 선택영역 이동**. 커서 옆 **픽셀 치수(W×H)** 표시. ←/→ 모드변경, Esc/✕ 취소.
 - 저장 위치: `~/Documents/PICkle bottle` (Settings에서 변경 가능, 변경 시 경고).
 - **편집기 3도구** (왼쪽 아이콘 레일 + **선택 시 옆에 떠있는 옵션 팝오버**, 마우스 떠나면 ~2초 후 자동 페이드 / 선택 툴 재클릭=토글):
   - 펜(색7/굵기3) · 블러(가우시안+모자이크 / 브러시+영역, 강도 슬라이더) · 워터마크(텍스트 **AND** 로고 동시, 각각 독립 드래그·크기·투명도)
@@ -59,6 +59,19 @@
 - **폴더아이콘 교체**: `guide/폴더아이콘.png`(피클병)·`guide/폴더아이콘_빈병.png`(빈병)을 1024 정사각으로 패딩해 `FolderIconFull/Empty.imageset` 교체.
 - **빈 보관함 일러스트 교체**: `guide/빈폴더 안내.png`(8000²)를 512²로 최적화(1MB→70KB)해 `HistoryEmptyArt.imageset`. `HistoryView` emptyState에서 `Text("🥒")` → `Image("HistoryEmptyArt")`. (그림 속 문구 "THE FOLDER IS EMPTY"는 영어 고정, 아래 안내문은 다국어)
 - **Sparkle 자동 업데이트(앱 측)**: 형 pizzaClip 패턴 이식. Sparkle 2.6.0 패키지 + Info.plist SU* 키(`SUFeedURL=https://pizza-clip.com/pickle/appcast.xml`, `SUPublicEDKey`=pizzaClip 키 재사용) + AppDelegate `SPUStandardUpdaterController` + "업데이트 확인…" 메뉴. 릴리스 스크립트에 Sparkle 헬퍼(XPC/Updater.app/Autoupdate) Developer ID 재서명 단계 추가(공증 통과 필수). appcast 생성: `scripts/sparkle-appcast.sh`. **호스팅 배포는 미완**(위 "다음" 참고).
+
+---
+
+## ✅ 2026-06-09 (저녁) — 캡처를 ⌘⇧4식 "화면 무변화" 라이브로 전환 (freeze 제거)
+
+> **사용자 피드백**: freeze(단축키 누른 순간 전 화면 SCK 캡처)가 **화면이 미세하게 줌되는(작아졌다 커지는) 시각 효과**를 유발. 이는 **ScreenCaptureKit 캡처 시 macOS가 주는 시스템 효과**라 앱이 끌 수 없음(검색·실기 확인). macOS 기본 ⇧⌘4처럼 **화면 변화 0**을 원함.
+>
+> **해결: freeze 제거 → 라이브 캡처.** 단축키 → 라이브 화면 위 **완전 투명 오버레이** + 십자선 → 드래그 선택 → commit 시 그 영역만 SCK 캡처(오버레이 사라진 뒤).
+- `AppDelegate.presentCaptureMenu` = `beginRegionSelect(frozen: [:])`만 (freeze 호출 제거).
+- `SelectionOverlayView.draw` = dim·freeze 제거, **1% 검정 fill**로 마우스만 수신(★완전 투명 창은 클릭이 아래 앱으로 통과 → 드래그가 "풀림". 1% 알파 fill이 픽셀을 만들어 이벤트 수신, 화면은 사실상 그대로). 선택 테두리(검정 받침+초록)+커서 옆 픽셀 치수만.
+- commit 시 image=nil → `runRegionCapture`가 라이브 경로(`captureRegionToFile/Clipboard` = `captureSCK` 영역 캡처)로.
+- ⚠️ **트레이드오프(사용자 합의)**: 영상·애니메이션은 "누른 순간"이 아니라 "드래그 끝낸 순간"이 찍힘 — freeze의 원래 목적은 포기.
+- ⚠️ **미사용(정리 대상) 코드**: freeze 경로가 전부 dead지만 동작은 무해(항상 라이브). 다음에 정리 권장 — `CaptureService.freezeScreens/saveImageToFile/copyImageToClipboard`, `RegionSelectController`의 freeze 일체(`freezeImage/freezeScale/screenID/croppedImage/applyFreeze`, `begin(frozen:)` 파라미터), `runRegionCapture`의 image 분기.
 
 ---
 
