@@ -72,9 +72,7 @@
 "editor.blur.intensity.help" = "Blur intensity";
 
 /* Crop controls */
-"editor.crop.hint" = "Drag the corner/edge handles to set the crop area, then press Crop. (Drag inside to move.)";
 "editor.crop.apply" = "Crop";
-"editor.crop.reset" = "Reset to full";
 
 /* ===== Settings — tabs ===== */
 "settings.tab.general" = "General";

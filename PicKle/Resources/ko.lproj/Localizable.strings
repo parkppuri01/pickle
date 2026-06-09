@@ -72,9 +72,7 @@
 "editor.blur.intensity.help" = "블러 강도";
 
 /* Crop controls */
-"editor.crop.hint" = "모서리·변 핸들을 끌어 자를 영역을 맞춘 뒤 ‘자르기’를 누르세요. (안쪽을 끌면 이동)";
 "editor.crop.apply" = "자르기";
-"editor.crop.reset" = "전체로 되돌리기";
 
 /* ===== Settings — tabs ===== */
 "settings.tab.general" = "일반";

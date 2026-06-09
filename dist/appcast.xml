@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>PICkle</title>
+        <link>https://pizza-clip.com/pickle/appcast.xml</link>
+        <description>PICkle updates</description>
+        <language>en</language>
+        <item>
+            <title>PICkle 1.0.0</title>
+            <pubDate>Tue, 09 Jun 2026 08:35:21 +0000</pubDate>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<h2>PICkle 1.0</h2>
+<p>스크린샷을 캡처 · 편집 · 보관하는 메뉴바 앱, 첫 정식 버전입니다 🥒</p>
+<h3>캡처</h3>
+<ul>
+<li>단축키로 영역 캡처 — 저장(⇧⌥S) · 편집(⇧⌥D) · 클립보드(⇧⌥A)</li>
+<li>단축키를 누른 순간 화면을 고정해, 영상·애니메이션도 원하는 장면 그대로 캡처</li>
+<li>드래그 중 선택 영역의 픽셀 크기 표시, 스페이스바로 영역 이동</li>
+<li>보관함 열기 단축키(⇧⌥F)</li>
+</ul>
+<h3>편집</h3>
+<ul>
+<li>펜 · 블러/모자이크 · 워터마크(텍스트 + 로고 동시)</li>
+<li>자르기(크롭) — 모서리·변 핸들로 조절 후 Enter</li>
+<li>⌘Z 되돌리기</li>
+</ul>
+<h3>보관 · 기타</h3>
+<ul>
+<li>자동 보관함 폴더 + 기간별 자동 삭제</li>
+<li>한국어 / English 즉시 전환</li>
+<li>자동 업데이트</li>
+</ul>
+]]></description>
+            <!-- ⚠️ Put the REAL DMG download URL here (GitHub Release asset, etc.). -->
+            <enclosure url="https://pizza-clip.com/pickle/PICkle-1.0.0.dmg"
+                       type="application/octet-stream"
+                       sparkle:edSignature="sNwPBqKAvgw0WCtF1+SSR1Sma3SCbueEIix1ZVG5VOLjlhPvHkh/BGVjg1urtTVa3ouoR7ZxM8CGMdeinJShAQ==" length="3632090" />
+        </item>
+    </channel>
+</rss>

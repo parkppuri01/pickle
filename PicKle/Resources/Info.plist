@@ -33,6 +33,8 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>PICkle captures your screen to save and edit screenshots in your bottle folder.</string>
 	<key>SUPublicEDKey</key>
 	<string>KR0QzoAjNr4/Crb4N+2AEGL2GKvfX8PO/yTA3sTQolg=</string>
 	<key>SUFeedURL</key>
