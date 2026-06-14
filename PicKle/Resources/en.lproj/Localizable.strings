@@ -43,6 +43,10 @@
 "editor.tool.watermark" = "Watermark";
 "editor.tool.crop" = "Crop";
 "editor.undo.help" = "Undo (⌘Z)";
+"editor.pen.custom.help" = "Color palette — custom";
+"editor.pen.eyedropper.help" = "Eyedropper — pick a color from the screen";
+"editor.pen.copyHex.help" = "Click to copy the color code";
+"editor.pen.copied" = "Copied!";
 "editor.cancel" = "Cancel";
 "editor.save" = "Save";
 

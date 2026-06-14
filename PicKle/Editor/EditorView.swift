@@ -10,6 +10,15 @@ private struct CanvasScaleKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
+/// Reports the option popover's natural content height up to the view, so the
+/// popover can cap itself to the window and scroll instead of clipping when a
+/// tool's controls (e.g. the pen's expanded color picker) are taller than the
+/// editor window — which happens for small captures opened at the min size.
+private struct PopoverContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 /// A crop-box handle the user can drag: 4 corners, 4 edge midpoints, or the whole
 /// box (move). Drives the crop-rect math in `applyCropDrag`.
 private enum CropHandle {
@@ -54,6 +63,22 @@ struct EditorView: View {
     /// after the pointer leaves it, so it stops covering the canvas.
     @State private var popoverVisible = true
     @State private var popoverHideTask: DispatchWorkItem?
+    /// True while the eyedropper loupe is up — suspends the popover auto-hide so
+    /// the controls don't fade away while the user is mid-pick on the screen.
+    @State private var pickingColor = false
+    /// The inline color picker (HS/B square + hue bar) is expanded under the pen
+    /// row. Lives inside the popover, so there's no detached system color window.
+    @State private var showInlinePicker = false
+    /// Inline picker working state, in HSB (0…1). Kept separately from the model's
+    /// packed hex so hue survives at zero saturation (white/black/grays).
+    @State private var pHue: Double = 0
+    @State private var pSat: Double = 0
+    @State private var pBri: Double = 0
+    /// Measured natural height of the popover content — caps the popover to the
+    /// window so a tall expanded picker scrolls instead of clipping off-screen.
+    @State private var popoverContentHeight: CGFloat = 0
+    /// Brief "Copied!" feedback after the hex readout is clicked to copy.
+    @State private var copiedHex = false
     /// Crop tool: the kept-region rectangle, in display-space (top-left origin).
     /// nil = crop tool not active yet; it's seeded to the full image on entry.
     @State private var cropRect: CGRect?
@@ -78,7 +103,11 @@ struct EditorView: View {
         // The selected tool's options float next to its rail icon (design "B").
         // Crop is the exception — it has no popover; its control is the on-canvas
         // Crop button that appears once the box is changed.
-        .overlay(alignment: .topLeading) { if model.tool != .crop { optionsPopover } }
+        .overlay(alignment: .topLeading) {
+            if model.tool != .crop {
+                GeometryReader { geo in optionsPopover(availableHeight: geo.size.height) }
+            }
+        }
         .environment(\.colorScheme, .dark)
     }
 
@@ -655,40 +684,52 @@ struct EditorView: View {
 
     // MARK: - Floating tool-option popover (anchored at the active rail icon)
 
-    @ViewBuilder
-    private var optionsPopover: some View {
-        HStack(alignment: .top, spacing: 0) {
+    private func optionsPopover(availableHeight: CGFloat) -> some View {
+        // Anchor the popover next to the active tool icon, then cap its height to
+        // what's left below that anchor so it never runs off the window bottom.
+        let anchorTop = Layout.topBarHeight + 1 + Layout.railTopInset
+                      + activeToolIndex * Layout.toolSlot - 2
+        let cap = max(180, availableHeight - anchorTop - 12)
+        // Size the box to its content, but no taller than the cap (then it scrolls).
+        let boxHeight = popoverContentHeight > 0 ? min(popoverContentHeight, cap) : cap
+        return HStack(alignment: .top, spacing: 0) {
             PopoverArrow()
                 .fill(Palette.popoverBG)
                 .frame(width: 7, height: 13)
                 .padding(.top, 16)
-            VStack(alignment: .leading, spacing: 12) {
-                Text(toolHelp(model.tool))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Palette.iconDim)
-                    .textCase(.uppercase)
-                Group {
-                    switch model.tool {
-                    case .pen: penControls
-                    case .blur: blurControls
-                    case .watermark: watermarkControls
-                    case .crop: EmptyView()   // crop has no popover (on-canvas button)
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(toolHelp(model.tool))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Palette.iconDim)
+                        .textCase(.uppercase)
+                    Group {
+                        switch model.tool {
+                        case .pen: penControls
+                        case .blur: blurControls
+                        case .watermark: watermarkControls
+                        case .crop: EmptyView()   // crop has no popover (on-canvas button)
+                        }
                     }
                 }
+                .padding(13)
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: PopoverContentHeightKey.self, value: g.size.height)
+                })
             }
-            .padding(13)
+            .frame(height: boxHeight)
             .background(Palette.popoverBG, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1))
             .shadow(color: .black.opacity(0.45), radius: 16, y: 6)
+            .onPreferenceChange(PopoverContentHeightKey.self) { popoverContentHeight = $0 }
             // Keep it up while hovered; fade ~2s after the pointer leaves.
             .onHover { hovering in
                 if hovering { keepPopover() } else { scheduleHidePopover() }
             }
         }
         .padding(.leading, Layout.railWidth - 1)
-        .padding(.top, Layout.topBarHeight + 1 + Layout.railTopInset
-                 + activeToolIndex * Layout.toolSlot - 2)
+        .padding(.top, anchorTop)
         .opacity(popoverVisible ? 1 : 0)
         .allowsHitTesting(popoverVisible)
         .animation(.easeOut(duration: 0.12), value: model.tool)
@@ -751,6 +792,9 @@ struct EditorView: View {
     /// Fade the popover out after `delay` seconds unless cancelled (re-shown).
     private func scheduleHidePopover(after delay: Double = 2) {
         popoverHideTask?.cancel()
+        // Don't fade while the eyedropper loupe is up — it roams the whole screen,
+        // so the pointer leaves the popover, but the user is still mid-pick.
+        if pickingColor { popoverHideTask = nil; return }
         let item = DispatchWorkItem {
             withAnimation(.easeInOut(duration: 0.4)) { popoverVisible = false }
         }
@@ -850,6 +894,20 @@ struct EditorView: View {
                       alignment: .leading, spacing: 9) {
                 ForEach(EditorModel.palette, id: \.self) { colorSwatch($0) }
             }
+            // Custom color: the rainbow-wheel button opens an INLINE picker right
+            // here in the popover (no detached system color window that lingers
+            // after the popover closes). The eyedropper grabs any on-screen pixel;
+            // the mono hex shows the active color.
+            HStack(spacing: 12) {
+                paletteToggle
+                eyedropperButton
+                hexCopyButton
+                Spacer(minLength: 0)
+            }
+            if showInlinePicker {
+                inlineColorPicker
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
             Divider().overlay(Color.white.opacity(0.08))
             HStack(spacing: 14) {
                 ForEach(EditorModel.widths, id: \.self) { widthDot($0) }
@@ -857,6 +915,224 @@ struct EditorView: View {
             }
         }
         .frame(width: 176)
+    }
+
+    /// The rainbow color-wheel button — an unmistakable "open the color palette"
+    /// affordance. Toggles the inline picker; the small center dot previews the
+    /// active color once it's custom, and the ring brightens while open.
+    private var paletteToggle: some View {
+        Button {
+            if !showInlinePicker { seedHSB(from: model.colorHex) }
+            withAnimation(.easeOut(duration: 0.15)) { showInlinePicker.toggle() }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(AngularGradient(gradient: Gradient(colors: Self.hueWheel), center: .center))
+                Circle()
+                    .fill(Color(hex: Int(model.colorHex)))
+                    .frame(width: 9, height: 9)
+                    .opacity(isCustomColorActive ? 1 : 0)
+                Circle()
+                    .strokeBorder(Color.white.opacity(showInlinePicker ? 0.95 : 0.4),
+                                  lineWidth: showInlinePicker ? 2 : 1)
+            }
+            .frame(width: 22, height: 22)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(L("editor.pen.custom.help"))
+    }
+
+    /// Eyedropper: launches macOS's screen color sampler (the magnifier loupe).
+    /// One click anywhere on screen sets the pen color to that pixel; Esc cancels
+    /// (handler gets nil). No screen-recording permission needed — it's a system
+    /// service, and the editor window stays put behind the loupe.
+    private var eyedropperButton: some View {
+        Button {
+            // Keep the popover up for the whole pick: the loupe roams the screen,
+            // so the pointer leaves the popover and would otherwise arm the fade.
+            pickingColor = true
+            keepPopover()
+            NSColorSampler().show { picked in
+                if let hex = picked?.hexRGB { model.colorHex = hex }
+                pickingColor = false
+                scheduleHidePopover()
+            }
+        } label: {
+            Image(systemName: "eyedropper")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.icon)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.white.opacity(0.08)))
+                .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(L("editor.pen.eyedropper.help"))
+    }
+
+    /// Inline color picker shown under the custom row: a saturation/brightness
+    /// square plus a hue bar. It writes `model.colorHex` directly while dragging
+    /// and re-seeds its thumbs when the color is changed elsewhere (preset tap or
+    /// eyedropper) — the onChange skips our own writes since they already match.
+    private var inlineColorPicker: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sbSquare
+            hueBar
+        }
+        .onChange(of: model.colorHex) { newHex in
+            if newHex != Self.hsbToHex(pHue, pSat, pBri) { seedHSB(from: newHex) }
+        }
+    }
+
+    /// Saturation (x) × brightness (y) field for the current hue. Drag to pick.
+    private var sbSquare: some View {
+        let w: CGFloat = 150, h: CGFloat = 96
+        return ZStack {
+            Rectangle().fill(Color(hue: pHue, saturation: 1, brightness: 1))
+            LinearGradient(colors: [.white, .clear], startPoint: .leading, endPoint: .trailing)
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+        }
+        .frame(width: w, height: h)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .stroke(Color.white.opacity(0.15), lineWidth: 1))
+        .overlay(alignment: .topLeading) {
+            pickerThumb.offset(x: pSat * w - 7, y: (1 - pBri) * h - 7)
+        }
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+            pSat = min(max(v.location.x / w, 0), 1)
+            pBri = min(max(1 - v.location.y / h, 0), 1)
+            applyHSB()
+        })
+    }
+
+    /// Horizontal rainbow hue bar. Drag to rotate the hue.
+    private var hueBar: some View {
+        let w: CGFloat = 150, h: CGFloat = 14
+        return LinearGradient(gradient: Gradient(colors: Self.hueWheel),
+                              startPoint: .leading, endPoint: .trailing)
+            .frame(width: w, height: h)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
+            .overlay(alignment: .leading) {
+                Circle()
+                    .fill(Color(hue: pHue, saturation: 1, brightness: 1))
+                    .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                    .frame(width: h + 4, height: h + 4)
+                    .shadow(color: .black.opacity(0.3), radius: 1)
+                    .offset(x: pHue * w - (h + 4) / 2)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                pHue = min(max(v.location.x / w, 0), 1)
+                applyHSB()
+            })
+    }
+
+    /// White ring thumb for the SB square, readable on any underlying color.
+    private var pickerThumb: some View {
+        Circle()
+            .strokeBorder(.white, lineWidth: 2)
+            .frame(width: 14, height: 14)
+            .shadow(color: .black.opacity(0.5), radius: 1)
+            .allowsHitTesting(false)
+    }
+
+    /// True when the active pen color isn't one of the preset swatches — lights the
+    /// center dot on the palette wheel so "a custom color is active" is visible.
+    private var isCustomColorActive: Bool { !EditorModel.palette.contains(model.colorHex) }
+
+    /// The active pen color as a `#RRGGBB` string — shown in the readout and copied
+    /// to the clipboard when tapped.
+    private var currentHexString: String { String(format: "#%06X", Int(model.colorHex)) }
+
+    /// Click-to-copy hex readout. A copy glyph hints it's tappable; tapping puts
+    /// the `#RRGGBB` string on the clipboard and flashes "Copied!" for a beat.
+    private var hexCopyButton: some View {
+        Button(action: copyHex) {
+            HStack(spacing: 3) {
+                Image(systemName: copiedHex ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 8, weight: .bold))
+                Text(copiedHex ? L("editor.pen.copied") : currentHexString)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+            }
+            .foregroundStyle(copiedHex ? AppColors.accent : Color.white.opacity(0.6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(L("editor.pen.copyHex.help"))
+    }
+
+    /// Copy the current color's hex to the clipboard, with brief on-screen feedback.
+    private func copyHex() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(currentHexString, forType: .string)
+        keepPopover()   // don't let the popover fade out under the feedback
+        withAnimation(.easeOut(duration: 0.12)) { copiedHex = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            withAnimation(.easeOut(duration: 0.2)) { copiedHex = false }
+        }
+    }
+
+    // MARK: Pen color — inline HSB picker math (kept in sRGB component space for
+    // round-trip consistency; no NSColor color-space conversions to drift on).
+
+    /// 13 evenly spaced stops around the hue circle (0…1) — both the wheel button's
+    /// angular fill and the hue bar's linear gradient.
+    private static let hueWheel: [Color] =
+        stride(from: 0.0, through: 1.0, by: 1.0 / 12).map { Color(hue: $0, saturation: 1, brightness: 1) }
+
+    private func applyHSB() { model.colorHex = Self.hsbToHex(pHue, pSat, pBri) }
+
+    private func seedHSB(from hex: UInt32) {
+        let (hue, sat, bri) = Self.hexToHSB(hex)
+        if sat > 0.001 { pHue = hue }   // keep hue stable for white/black/grays
+        pSat = sat; pBri = bri
+    }
+
+    static func hsbToHex(_ h: Double, _ s: Double, _ v: Double) -> UInt32 {
+        let (r, g, b) = hsbToRGB(h, s, v)
+        return (UInt32((r * 255).rounded()) << 16)
+             | (UInt32((g * 255).rounded()) << 8)
+             |  UInt32((b * 255).rounded())
+    }
+
+    static func hexToHSB(_ hex: UInt32) -> (Double, Double, Double) {
+        rgbToHSB(Double((hex >> 16) & 0xFF) / 255,
+                 Double((hex >> 8) & 0xFF) / 255,
+                 Double(hex & 0xFF) / 255)
+    }
+
+    static func hsbToRGB(_ h: Double, _ s: Double, _ v: Double) -> (Double, Double, Double) {
+        if s <= 0 { return (v, v, v) }
+        let hh = (h - h.rounded(.down)) * 6     // wrap hue into [0,6)
+        let i = Int(hh)
+        let f = hh - Double(i)
+        let p = v * (1 - s)
+        let q = v * (1 - s * f)
+        let t = v * (1 - s * (1 - f))
+        switch i {
+        case 0: return (v, t, p)
+        case 1: return (q, v, p)
+        case 2: return (p, v, t)
+        case 3: return (p, q, v)
+        case 4: return (t, p, v)
+        default: return (v, p, q)
+        }
+    }
+
+    static func rgbToHSB(_ r: Double, _ g: Double, _ b: Double) -> (Double, Double, Double) {
+        let mx = max(r, g, b), mn = min(r, g, b), d = mx - mn
+        var h = 0.0
+        if d != 0 {
+            if mx == r { h = ((g - b) / d).truncatingRemainder(dividingBy: 6) }
+            else if mx == g { h = (b - r) / d + 2 }
+            else { h = (r - g) / d + 4 }
+            h /= 6
+            if h < 0 { h += 1 }
+        }
+        return (h, mx == 0 ? 0 : d / mx, mx)
     }
 
     // MARK: Watermark controls — add/edit text on the canvas, plus logo options.

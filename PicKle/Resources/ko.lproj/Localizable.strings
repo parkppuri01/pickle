@@ -43,6 +43,10 @@
 "editor.tool.watermark" = "워터마크";
 "editor.tool.crop" = "자르기";
 "editor.undo.help" = "되돌리기 (⌘Z)";
+"editor.pen.custom.help" = "색상 팔레트 — 직접 선택";
+"editor.pen.eyedropper.help" = "스포이드 — 화면에서 색 추출";
+"editor.pen.copyHex.help" = "클릭하여 색상 코드 복사";
+"editor.pen.copied" = "복사됨!";
 "editor.cancel" = "취소";
 "editor.save" = "저장";
 

@@ -54,4 +54,17 @@ extension Color {
             )
         })
     }
+
+}
+
+extension NSColor {
+    /// This color as an opaque `0xRRGGBB` value in sRGB (alpha dropped). nil if it
+    /// can't be converted to an RGB color space (e.g. a pattern color).
+    var hexRGB: UInt32? {
+        guard let c = usingColorSpace(.sRGB) else { return nil }
+        let r = UInt32((c.redComponent * 255).rounded())
+        let g = UInt32((c.greenComponent * 255).rounded())
+        let b = UInt32((c.blueComponent * 255).rounded())
+        return (r << 16) | (g << 8) | b
+    }
 }
